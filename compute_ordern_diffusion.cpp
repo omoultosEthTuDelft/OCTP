@@ -15,7 +15,7 @@
 */
 
 #include <string.h>
-#include "computer_ordern_diffusion.h"
+#include "compute_ordern_diffusion.h"
 #include "atom.h"
 #include "update.h"
 #include "group.h"
