@@ -11,10 +11,15 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
+/*
+    compute_ordern_viscosity is based on the compute_pressure command.
+*/
+
+
 #include <mpi.h>
 #include <string.h>
 #include <stdlib.h>
-#include "compute_bulkviscosity.h"
+#include "compute_ordern_viscosity.h"
 #include "atom.h"
 #include "update.h"
 #include "domain.h"
@@ -33,7 +38,7 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeBulkViscosity::ComputeBulkViscosity(LAMMPS *lmp, int narg, char **arg) :
+ComputeOrdernViscosity::ComputeOrdernViscosity(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
   if (narg < 4) error->all(FLERR,"Illegal compute pressure command");
@@ -111,7 +116,7 @@ ComputeBulkViscosity::ComputeBulkViscosity(LAMMPS *lmp, int narg, char **arg) :
 
 /* ---------------------------------------------------------------------- */
 
-ComputeBulkViscosity::~ComputeBulkViscosity()
+ComputeOrdernViscosity::~ComputeOrdernViscosity()
 {
   delete [] id_temp;
   delete [] vector;
@@ -120,7 +125,7 @@ ComputeBulkViscosity::~ComputeBulkViscosity()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeBulkViscosity::init()
+void ComputeOrdernViscosity::init()
 {
   boltz = force->boltz;
   nktv2p = force->nktv2p;
@@ -193,7 +198,7 @@ void ComputeBulkViscosity::init()
    assume KE tensor has already been computed
 ------------------------------------------------------------------------- */
 
-double ComputeBulkViscosity::compute_scalar()
+double ComputeOrdernViscosity::compute_scalar()
 {
   invoked_scalar = update->ntimestep;
   if (update->vflag_global != invoked_scalar)
@@ -438,7 +443,7 @@ double ComputeBulkViscosity::compute_scalar()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeBulkViscosity::virial_compute(int n, int ndiag)
+void ComputeOrdernViscosity::virial_compute(int n, int ndiag)
 {
   int i,j;
   double v[6],*vcomponent;
@@ -469,7 +474,7 @@ void ComputeBulkViscosity::virial_compute(int n, int ndiag)
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeBulkViscosity::reset_extra_compute_fix(const char *id_new)
+void ComputeOrdernViscosity::reset_extra_compute_fix(const char *id_new)
 {
   delete [] id_temp;
   int n = strlen(id_new) + 1;

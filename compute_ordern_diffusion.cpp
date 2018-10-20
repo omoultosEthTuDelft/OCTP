@@ -10,8 +10,12 @@
 
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
+/*
+    compute_ordern_diffusion is based on the compute_msd command.
+*/
+
 #include <string.h>
-#include "compute_msd_norder.h"
+#include "computer_ordern_diffusion.h"
 #include "atom.h"
 #include "update.h"
 #include "group.h"
@@ -31,7 +35,7 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeMSDNorder::ComputeMSDNorder(LAMMPS *lmp, int narg, char **arg) :
+ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
   if (narg < 3) error->all(FLERR,"Illegal compute msd command");
@@ -135,7 +139,7 @@ ComputeMSDNorder::ComputeMSDNorder(LAMMPS *lmp, int narg, char **arg) :
 
 /* ---------------------------------------------------------------------- */
 
-ComputeMSDNorder::~ComputeMSDNorder()
+ComputeOrdernDiffusion::~ComputeOrdernDiffusion()
 {
   // check nfix in case all fixes have already been deleted
 
@@ -154,7 +158,7 @@ ComputeMSDNorder::~ComputeMSDNorder()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeMSDNorder::init()
+void ComputeOrdernDiffusion::init()
 {
   // set fix which stores reference atom coords
 
@@ -182,7 +186,7 @@ void ComputeMSDNorder::init()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeMSDNorder::compute_vector()
+void ComputeOrdernDiffusion::compute_vector()
 {
   invoked_vector = update->ntimestep;
 
@@ -532,7 +536,7 @@ void ComputeMSDNorder::compute_vector()
    initialize one atom's storage values, called when atom is created
 ------------------------------------------------------------------------- */
 
-void ComputeMSDNorder::set_arrays(int i)
+void ComputeOrdernDiffusion::set_arrays(int i)
 {
   double **xoriginal = fix->astore;
   double **x = atom->x;

@@ -13,21 +13,21 @@
 
 #ifdef COMPUTE_CLASS
 
-ComputeStyle(bulkviscosity,ComputeBulkViscosity)
+ComputeStyle(viscosity/ordern,ComputeOrdernViscosity)
 
 #else
 
-#ifndef LMP_COMPUTE_BULK_VISCOSITY_H
-#define LMP_COMPUTE_BULK_VISCOSITY_H
+#ifndef LMP_COMPUTE_ORDERN_VISCOSITY_H
+#define LMP_COMPUTE_ORDERN_VISCOSITY_H
 
 #include "compute.h"
 
 namespace LAMMPS_NS {
 
-class ComputeBulkViscosity : public Compute {
+class ComputeOrdernViscosity : public Compute {
  public:
-  ComputeBulkViscosity(class LAMMPS *, int, char **);
-  virtual ~ComputeBulkViscosity();
+  ComputeOrdernViscosity(class LAMMPS *, int, char **);
+  virtual ~ComputeOrdernViscosity();
   void init();
   double compute_scalar();
   void reset_extra_compute_fix(const char *);

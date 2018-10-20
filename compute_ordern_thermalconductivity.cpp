@@ -16,10 +16,14 @@
                          Mario Pinto (Computational Research Lab, Pune, India)
 ------------------------------------------------------------------------- */
 
+/*
+    compute_ordern_thermalconductivity is based on the compute_heatflux command.
+*/
+
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
-#include "compute_thermalconductivity.h"
+#include "compute_ordern_thermalconductivity.h"
 #include "domain.h"
 #include "atom.h"
 #include "update.h"
@@ -34,7 +38,7 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeThermalConductivity::ComputeThermalConductivity(LAMMPS *lmp, int narg, char **arg) :
+ComputeOrderNThermalConductivity::ComputeOrderNThermalConductivity(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
   if (narg != 6) error->all(FLERR,"Illegal compute thermalconductivity command");
@@ -80,7 +84,7 @@ ComputeThermalConductivity::ComputeThermalConductivity(LAMMPS *lmp, int narg, ch
 
 /* ---------------------------------------------------------------------- */
 
-ComputeThermalConductivity::~ComputeThermalConductivity()
+ComputeOrderNThermalConductivity::~ComputeOrderNThermalConductivity()
 {
   delete [] id_ke;
   delete [] id_pe;
@@ -90,7 +94,7 @@ ComputeThermalConductivity::~ComputeThermalConductivity()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeThermalConductivity::init()
+void ComputeOrderNThermalConductivity::init()
 {
   // error checks
   int ike = modify->find_compute(id_ke);
@@ -122,7 +126,7 @@ void ComputeThermalConductivity::init()
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeThermalConductivity::compute_vector()
+void ComputeOrderNThermalConductivity::compute_vector()
 {
   invoked_vector = update->ntimestep;
 

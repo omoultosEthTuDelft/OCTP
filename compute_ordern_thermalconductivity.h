@@ -11,23 +11,27 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
+/*
+    compute_ordern_thermalconductivity is based on the compute_heatflux command.
+*/
+
 #ifdef COMPUTE_CLASS
 
-ComputeStyle(thermalconductivity,ComputeThermalConductivity)
+ComputeStyle(thermalconductivity/ordern,ComputeOrderNThermalConductivity)
 
 #else
 
-#ifndef LMP_COMPUTE_THERMALCONDUCTIVITY_H
-#define LMP_COMPUTE_THERMALCONDUCTIVITY_H
+#ifndef LMP_COMPUTE_ORDERN_THERMALCONDUCTIVITY_H
+#define LMP_COMPUTE_ORDERN_THERMALCONDUCTIVITY_H
 
 #include "compute.h"
 
 namespace LAMMPS_NS {
 
-class ComputeThermalConductivity : public Compute {
+class ComputeOrderNThermalConductivity : public Compute {
  public:
-  ComputeThermalConductivity(class LAMMPS *, int, char **);
-  ~ComputeThermalConductivity();
+  ComputeOrderNThermalConductivity(class LAMMPS *, int, char **);
+  ~ComputeOrderNThermalConductivity();
   void init();
   void compute_vector();
   #define NUMBER_OF_BLOCKS		10

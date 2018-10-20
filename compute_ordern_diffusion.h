@@ -10,24 +10,26 @@
 
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
-
+/*
+    compute_ordern_diffusion is based on the compute_msd command.
+*/
 #ifdef COMPUTE_CLASS
 
-ComputeStyle(msd/norder,ComputeMSDNorder)
+ComputeStyle(diffusion/ordern,ComputeOrdernDiffusion)
 
 #else
 
-#ifndef LMP_COMPUTE_MSD__NORDER_H
-#define LMP_COMPUTE_MSD__NORDER_H
+#ifndef LMP_COMPUTE_ORDERN_DIFFUSION_H
+#define LMP_COMPUTE_ORDERN_DIFFUSION_H
 
 #include "compute.h"
 
 namespace LAMMPS_NS {
 
-class ComputeMSDNorder : public Compute {
+class ComputeOrdernDiffusion : public Compute {
  public:
-  ComputeMSDNorder(class LAMMPS *, int, char **);
-  virtual ~ComputeMSDNorder();
+  ComputeOrdernDiffusion(class LAMMPS *, int, char **);
+  virtual ~ComputeOrdernDiffusion();
   void init();
   virtual void compute_vector();
   void set_arrays(int);
