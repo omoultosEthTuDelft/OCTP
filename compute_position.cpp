@@ -41,16 +41,17 @@ ComputePosition::ComputePosition(LAMMPS *lmp, int narg, char **arg) :
 //TB:  if (narg < 3) error->all(FLERR,"Illegal compute msd command");
   if (narg != 3) error->all(FLERR,"Illegal compute position command");
 
-/*
+
 //TB: what are these variables good for? They are not used!
 //TB: maybe important for the created vector!!!
+//TB: yes these are necessary to compute the vector
   vector_flag = 1;
   size_vector = 4;
   extvector = 0;
   create_attribute = 1;
 
   // optional args
-
+/*
 //TB: no flags needed
   comflag = 0;
   avflag = 0;
