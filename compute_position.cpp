@@ -15,13 +15,13 @@
 */
 
 #include <string.h>
-#include "compute_ordern_diffusion.h"
+#include "compute_position.h"
 #include "atom.h"
 #include "update.h"
 #include "group.h"
 #include "domain.h"
-#include "modify.h"
-#include "fix_store.h"
+//#include "modify.h"
+//#include "fix_store.h"
 #include "error.h"
 
 using namespace LAMMPS_NS;
@@ -43,6 +43,7 @@ ComputePosition::ComputePosition(LAMMPS *lmp, int narg, char **arg) :
 
 /*
 //TB: what are these variables good for? They are not used!
+//TB: maybe important for the created vector!!!
   vector_flag = 1;
   size_vector = 4;
   extvector = 0;
