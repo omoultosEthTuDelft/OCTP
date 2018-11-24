@@ -35,11 +35,14 @@ using namespace LAMMPS_NS;
 
 /* ---------------------------------------------------------------------- */
 
-ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg) :
+ComputePosition::ComputePosition(LAMMPS *lmp, int narg, char **arg) :
   Compute(lmp, narg, arg)
 {
-  if (narg < 3) error->all(FLERR,"Illegal compute msd command");
+//TB:  if (narg < 3) error->all(FLERR,"Illegal compute msd command");
+  if (narg != 3) error->all(FLERR,"Illegal compute position command");
 
+/*
+//TB: what are these variables good for? They are not used!
   vector_flag = 1;
   size_vector = 4;
   extvector = 0;
@@ -47,6 +50,7 @@ ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg
 
   // optional args
 
+//TB: no flags needed
   comflag = 0;
   avflag = 0;
 
@@ -71,6 +75,7 @@ ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg
   // create a new fix STORE style for reference positions
   // id = compute-ID + COMPUTE_STORE, fix group = compute group
 
+//TB: we do not need to store the initial positions
   int n = strlen(id) + strlen("_COMPUTE_STORE") + 1;
   id_fix = new char[n];
   strcpy(id_fix,id);
@@ -93,12 +98,14 @@ ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg
   if (fix->restart_reset) fix->restart_reset = 0;
   else {
     double **xoriginal = fix->astore;
-
+*/
     double **x = atom->x;
     int *mask = atom->mask;
     imageint *image = atom->image;
     int nlocal = atom->nlocal;
 
+/*
+//TB: no initial positions no flags
     for (int i = 0; i < nlocal; i++)
       if (mask[i] & groupbit) domain->unmap(x[i],image[i],xoriginal[i]);
       else xoriginal[i][0] = xoriginal[i][1] = xoriginal[i][2] = 0.0;
@@ -121,10 +128,10 @@ ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg
 
     naverage = 0;
   }
-
+*/
   // displacement vector
   
-  vector = new double[4]; 
+  vector = new double[4];  //TB: This has to be changed [4] -> natoms*5 or MAX_NUMBER_ATOMS*5
 
   // SJ: Start changing //
   MPI_Comm_rank(world, &me);            // Assigning the rank of a molecule for each core
@@ -132,76 +139,81 @@ ComputeOrdernDiffusion::ComputeOrdernDiffusion(LAMMPS *lmp, int narg, char **arg
   tmprecvcnts = new int[nprocs]; 
   recvcnts = new int[nprocs];
   displs = new int[nprocs];
-  memory->create(BlockDATA,MAX_NUMBER_OF_BLOCKS,atom->natoms,MAX_NUMBER_OF_BLOCKELEMENTS,3,"compute/msd_norder:BlockDATA");
+
+  //TB: what is memory->create good for?
+  //memory->create(BlockDATA,MAX_NUMBER_OF_BLOCKS,atom->natoms,MAX_NUMBER_OF_BLOCKELEMENTS,3,"compute/msd_norder:BlockDATA");
   // SJ: end changing  //
 
 }
 
 /* ---------------------------------------------------------------------- */
 
-ComputeOrdernDiffusion::~ComputeOrdernDiffusion()
+ComputePosition::~ComputePosition()
 {
   // check nfix in case all fixes have already been deleted
 
-  if (modify->nfix) modify->delete_fix(id_fix);
+  //if (modify->nfix) modify->delete_fix(id_fix);
 
-  delete [] id_fix;
+  //delete [] id_fix;
   delete [] vector;
   
   // SJ: Start changing //
   delete [] tmprecvcnts;
   delete [] recvcnts;
   delete [] displs;
-  memory->destroy(BlockDATA);
+  //memory->destroy(BlockDATA);
   // SJ: end changing //
 }
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeOrdernDiffusion::init()
+void ComputePosition::init()
 {
+
+  //TB: init() is required by Lammps, but we do not need to do anything?
+
   // set fix which stores reference atom coords
 
-  int ifix = modify->find_fix(id_fix);
-  if (ifix < 0) error->all(FLERR,"Could not find compute msd fix ID");
-  fix = (FixStore *) modify->fix[ifix];
+  //int ifix = modify->find_fix(id_fix);
+  //if (ifix < 0) error->all(FLERR,"Could not find compute msd fix ID");
+  //fix = (FixStore *) modify->fix[ifix];
 
   // nmsd = # of atoms in group
 
-  nmsd = group->count(igroup);
-  masstotal = group->mass(igroup);
+  //nmsd = group->count(igroup);
+  //masstotal = group->mass(igroup);
 
   // SJ: start changing //
-  WriteFileEvery = 10000;  
-  tmpnumgroup = 0;
+  //WriteFileEvery = 10000;  
+  //tmpnumgroup = 0;
   count = 0;
   NumberOfBlocks = 1;
-  for (int ii = 0; ii< MAX_NUMBER_OF_BLOCKS; ii++)
-  {
-      BlockLength[ii]=1;
-  }
+  //for (int ii = 0; ii< MAX_NUMBER_OF_BLOCKS; ii++)
+  //{
+  //    BlockLength[ii]=1;
+  //}
   // SJ: end changing //
 
 }
 
 /* ---------------------------------------------------------------------- */
 
-void ComputeOrdernDiffusion::compute_vector()
+void ComputePosition::compute_vector()
 {
   invoked_vector = update->ntimestep;
 
   // cm = current center of mass
 
-  double cm[3];
-  if (comflag) group->xcm(igroup,masstotal,cm);
-  else cm[0] = cm[1] = cm[2] = 0.0;
+  //double cm[3];
+  //if (comflag) group->xcm(igroup,masstotal,cm);
+  //else cm[0] = cm[1] = cm[2] = 0.0;
 
   // dx,dy,dz = displacement of atom from reference position
   // reference unwrapped position is stored by fix
   // relative to center of mass if comflag is set
   // for triclinic, need to unwrap current atom coord via h matrix
 
-  double **xoriginal = fix->astore;
+  //double **xoriginal = fix->astore;
 
   double **x = atom->x;
   int *mask = atom->mask;
@@ -212,34 +224,38 @@ void ComputeOrdernDiffusion::compute_vector()
   double yprd = domain->yprd;
   double zprd = domain->zprd;
 
-  double dx,dy,dz;
+  //double dx,dy,dz;
   int xbox,ybox,zbox;
 
-  double msd[4];
-  msd[0] = msd[1] = msd[2] = msd[3] = 0.0;
+  //double msd[4];
+  //msd[0] = msd[1] = msd[2] = msd[3] = 0.0;
 
   double xtmp, ytmp, ztmp;
 
   // update number of averages if requested
 
+  /* 
+  //TB: no flags
   double navfac;
   if (avflag) {
     naverage++;
     navfac = 1.0/(naverage+1);
   }
+  */
 
   // SJ: start chaning //
+  //TB: what is this? do we need any of this?
   int CurrentBlockLength; 
   int atomgroup , atomgroupbit;            // The ID of the group, its bit
   int numgroup = group->ngroup;            // The total # of available groups
   int natom = atom->natoms;                // total # of atoms in system, could be 0
   int *currentgroupbit = group->bitmask;    // The bitmask of a group
-  int ii = count/pow(MAX_NUMBER_OF_BLOCKELEMENTS,NumberOfBlocks);
-  while (ii != 0)
-  {
-    NumberOfBlocks++;
-    ii /= MAX_NUMBER_OF_BLOCKELEMENTS;
-  }
+  //int ii = count/pow(MAX_NUMBER_OF_BLOCKELEMENTS,NumberOfBlocks);
+  //while (ii != 0)
+  //{
+  // NumberOfBlocks++;
+  //  ii /= MAX_NUMBER_OF_BLOCKELEMENTS;
+  //}
   // SJ: end changing //
 
   if (domain->triclinic == 0) {
@@ -248,9 +264,9 @@ void ComputeOrdernDiffusion::compute_vector()
         xbox = (image[i] & IMGMASK) - IMGMAX;
         ybox = (image[i] >> IMGBITS & IMGMASK) - IMGMAX;
         zbox = (image[i] >> IMG2BITS) - IMGMAX;
-	xtmp = x[i][0] + xbox*xprd - cm[0];
-	ytmp = x[i][1] + ybox*yprd - cm[1];
-	ztmp = x[i][2] + zbox*zprd - cm[2];
+	xtmp = x[i][0] + xbox*xprd;
+	ytmp = x[i][1] + ybox*yprd;
+	ztmp = x[i][2] + zbox*zprd;
         // SJ: start chaning //
 	realatom = (atom->tag[i]) - 1;
 	sendbuff[5*i] = xtmp;
@@ -261,7 +277,7 @@ void ComputeOrdernDiffusion::compute_vector()
         // SJ: end changing //
 
 	// use running average position for reference if requested
-
+/*
 	if (avflag) {
 	  xoriginal[i][0] = (xoriginal[i][0]*naverage + xtmp)*navfac;
 	  xoriginal[i][1] = (xoriginal[i][1]*naverage + ytmp)*navfac;
@@ -275,7 +291,7 @@ void ComputeOrdernDiffusion::compute_vector()
         msd[1] += dy*dy;
         msd[2] += dz*dz;
         msd[3] += dx*dx + dy*dy + dz*dz;
-
+*/
       }
   } else {
     for (int i = 0; i < nlocal; i++)
@@ -283,9 +299,9 @@ void ComputeOrdernDiffusion::compute_vector()
         xbox = (image[i] & IMGMASK) - IMGMAX;
         ybox = (image[i] >> IMGBITS & IMGMASK) - IMGMAX;
         zbox = (image[i] >> IMG2BITS) - IMGMAX;
-        xtmp = x[i][0] + h[0]*xbox + h[5]*ybox + h[4]*zbox - cm[0];
-        ytmp = x[i][1] + h[1]*ybox + h[3]*zbox - cm[1];
-        ztmp = x[i][2] + h[2]*zbox - cm[2];
+        xtmp = x[i][0] + h[0]*xbox + h[5]*ybox + h[4]*zbox;
+        ytmp = x[i][1] + h[1]*ybox + h[3]*zbox;
+        ztmp = x[i][2] + h[2]*zbox;
         // SJ: start chaning //
 	realatom = (atom->tag[i]) - 1;
 	sendbuff[5*i] = xtmp;
@@ -297,6 +313,7 @@ void ComputeOrdernDiffusion::compute_vector()
 
 	// use running average position for reference if requested
 
+/*
 	if (avflag) {
 	  xoriginal[i][0] = (xoriginal[i][0]*naverage + xtmp)*navfac;
 	  xoriginal[i][1] = (xoriginal[i][0]*naverage + xtmp)*navfac;
@@ -310,6 +327,7 @@ void ComputeOrdernDiffusion::compute_vector()
         msd[1] += dy*dy;
         msd[2] += dz*dz;
         msd[3] += dx*dx + dy*dy + dz*dz;
+*/
       }
   }
   
@@ -325,7 +343,18 @@ void ComputeOrdernDiffusion::compute_vector()
       else displs[jj] += recvcnts[ii-1];
     }
   MPI_Allgatherv(sendbuff,5*nlocal, MPI_DOUBLE, recvbuff, recvcnts, displs, MPI_DOUBLE, world);
+
+  //TB: test start -> this has to be changed -> only to test if the program will compile
+    vector[0] = 0.0;
+    vector[1] = 1.0;
+    vector[2] = 2.0;
+    vector[3] = 3.0;
+  //TB: test end
+  
+
   // Definining the group number of each molecules on rank 0 
+  //TB: maybe not needed? could also be done i the fix
+  /*
   if (me == 0) 
   {
     for (int ii = 0; ii < natom; ii++)
@@ -380,6 +409,10 @@ void ComputeOrdernDiffusion::compute_vector()
       }
     }
   }
+  */
+
+  /*
+  //TB: not need
   // Calculating the elements of Dself, Cii*, and Cij 
   if (me == 0) 
   {
@@ -530,13 +563,17 @@ void ComputeOrdernDiffusion::compute_vector()
     vector[2] /= nmsd;
     vector[3] /= nmsd;
   }
+*/
+
 }
 
 /* ----------------------------------------------------------------------
    initialize one atom's storage values, called when atom is created
 ------------------------------------------------------------------------- */
+/*
+TB: not needed if we want to determine the current position
 
-void ComputeOrdernDiffusion::set_arrays(int i)
+void ComputePosition::set_arrays(int i)
 {
   double **xoriginal = fix->astore;
   double **x = atom->x;
@@ -544,3 +581,4 @@ void ComputeOrdernDiffusion::set_arrays(int i)
   xoriginal[i][1] = x[i][1];
   xoriginal[i][2] = x[i][2];
 }
+*/
