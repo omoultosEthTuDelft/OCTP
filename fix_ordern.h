@@ -44,37 +44,61 @@ class FixOrderN : public Fix {
 
   int me;   // the ID of the local processor
   int mode; // which type of transport properties (defined as enum)
+  int nvalues;  // the number of input values (it must be 1)
+  int nfreq;   // the frequency of writing files to disk
+  int icompute; // the ID of compute for the tranpsort property
+  int nrows;  // number of data passed to fix ordern via compute
+
+  bigint nvalid;        // WHAT IS IT???
+  bigint nvalid_last;   // WHAT IS IT???
+
+
+  long filepos1; // the location of header lines for file 1
+  long filepos2; // the location of header lines for file 2
+
+  char *filename1;  // filename for self-diffusion, shear viscosity, and conductivity
+  char *filename2;  // filename for onsager coefficients and bulk viscosity
+
+  char *format; // the default format of writing data to files (%g)
+  char *format_user;  // user-defined format of writing data to files
+  char *title; // optional text for the first line of the text
+  char *idcompute;   // the ID of compute 
+
+  FILE *fp1;  // output file 1 (self-diffusion, shear viscosity, thermal conductivity)
+  FILE *fp2;  // output file 2 (onsager coefficients, bulk viscosity)
+
+
+  // DIFFUSION inputs
+  int numgroup; // number of groups
 
 
 
   
-  int me,nvalues;
-  int nrepeat,nfreq,irepeat;
-  bigint nvalid,nvalid_last;
-  int *which,*argindex,*value2index,*offcol;
-  int *varlen;               // 1 if value is from variable-length compute
-  char **ids;
-  FILE *fp;
-  int nrows;
-  int any_variable_length;
-  int all_variable_length;
-  int lockforever;
+  //int me,nvalues;
+  //int nrepeat,nfreq,irepeat;
+  //bigint nvalid,nvalid_last;
+  //int *which,*argindex,*value2index,*offcol;
+  //int *varlen;               // 1 if value is from variable-length compute (NOT NEEDED)
+  //char **ids;
+  //FILE *fp;
+  //int any_variable_length;
+  //int all_variable_length;
+  //int lockforever;
 
-  int ave,nwindow,mode;
-  int noff,overwrite;
-  int *offlist;
-  char *format,*format_user;
-  char *title1,*title2,*title3;
-  long filepos;
+  //int ave,nwindow,mode;
+  //int noff,overwrite;
+  //int *offlist;
+  //char *format,*format_user;
+  //char *title1,*title2,*title3;
 
-  int norm,iwindow,window_limit;
-  double *vector;
-  double *vector_total;
-  double **vector_list;
-  double *column;
-  double **array;
-  double **array_total;
-  double ***array_list;
+  //int norm,iwindow,window_limit;
+  //double *vector;
+  //double *vector_total;
+  //double **vector_list;
+  //double *column;
+  //double **array;
+  //double **array_total;
+  //double ***array_list;
 
   int column_length(int);
   void invoke_scalar(bigint);

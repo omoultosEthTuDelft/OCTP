@@ -33,7 +33,7 @@ using namespace FixConst;
 
 //enum{COMPUTE,FIX,VARIABLE};
 //enum{ONE,RUNNING,WINDOW};
-//enum{SCALAR,VECTOR};
+enum{SCALAR,VECTOR};
 enum{VISCOSITY,THERMCOND,DIFFUSIVITY};
 
 //#define INVOKED_SCALAR 1
@@ -50,97 +50,80 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   vector(NULL), vector_total(NULL), vector_list(NULL),
   column(NULL), array(NULL), array_total(NULL), array_list(NULL)*/
 {
-  // At least 7 arguments are needed: [0-2], nevery, nfreq, TYPE, 
+  // At least 7 arguments are needed: [0-2], MODE, nevery, nwrite, value 
   if (narg < 7) error->all(FLERR,"Illegal fix ordern command");
 
   MPI_Comm_rank(world,&me);
 
+  // Initial values
+  fp1 = NULL;
+  fp2 = NULL;
+  //startstep = 0;
+  //noff = 0;
+  //offlist = NULL;
+  format_user = NULL;
+  format = (char *) "\t%g";
+  title = NULL;
+  
   // Define the type of transport property calculation
   if (strcmp(arg[3],"diffusivity") == 0) {
-      mode = DIFFUSIVITY;
-    } else if (strcmp(arg[3],"viscosity") == 0) {
-      mode = VISCOSITY;
-    } else if (strcmp(arg[3],"thermcond") == 0) {
-      mode = THERMCOND;
-    } else 
-      error->all(FLERR,"Illegal fix ordern command with no transport property");
+    mode = DIFFUSIVITY;
+    filename1 = "selfdiffusivity.dat";
+    filename2 = "onsagercoefficients.dat";
+  } else if (strcmp(arg[3],"viscosity") == 0) {
+    mode = VISCOSITY;
+    filename1 = "shearviscosity.dat";
+    filename2 = "bulkviscosity.dat";
+  } else if (strcmp(arg[3],"thermcond") == 0) {
+    mode = THERMCOND;
+    filename1 = "thermalconductivity.dat";
+    filename2 = NULL;
+  } else 
+    error->all(FLERR,"Illegal fix ordern command with no transport property");
 
-  // rate of sampling (when end_of_step() is called.)
-  nevery = force->inumeric(FLERR,arg[4]);   
-  // rate of writing files
-  nfreq = force->inumeric(FLERR,arg[5]);    
+  nevery = force->inumeric(FLERR,arg[4]); // rate of sampling (end_of_step())
+  nfreq = force->inumeric(FLERR,arg[5]);  // rate of writing files
   global_freq = nfreq;   //// DOUBLE CHECK THE MEANING
 
   dynamic_group_allow = 0;  // the groups should not be modified.
 
-  // scan values to check if the compute vector is given
-  //DELETEC then read options so know mode = SCALAR/VECTOR before re-reading values
-
+  // number of input values (it must be only one compute)
   nvalues = 0;
-
   int iarg = 6;
   while (iarg < narg) {
     if ((strncmp(arg[iarg],"c_",2) == 0)) {
       nvalues++;
-      iarg++;
     } else break;
   }
-  //// CHECK IF THERE IS ONLY AND ONLY ONE VECTOR COMPUTE ////
   if (nvalues == 0) error->all(FLERR,"No values in fix ordern command");
   if (nvalues > 1) error->all(FLERR,"More than 1 value in fix ordern command");
 
-  //// OPTIONS TILL LINE 174
-  // Default options
+  // getting the ID of compute for the transport property
+  int n = strlen(arg[iarg]);
+  char *suffix = new char[n];
+  strcpy(suffix,&arg[i][2]);
+  char *ptr = strchr(suffix,'[');
+  if (ptr) error->all(FLERR,"All components of the compute are required for fix ordern");
+  n = strlen(suffix) + 1;
+  idcompute = new char[n];
+  strcpy(idcompute,suffix);
+  delete [] suffix;
 
-  fp = NULL;
-  startstep = 0;
-  noff = 0;
-  offlist = NULL;
-  overwrite = 0;
-  format_user = NULL;
-  format = (char *) " %g";
-  title1 = NULL;
-  title2 = NULL;
-  title3 = NULL;
-
-  // optional args
-
+  // Optional arguments
+  iarg++;
   while (iarg < narg) {
+    // add more file options for mode == visocisty/diffusion/thermcond
     if (strcmp(arg[iarg],"file") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
-      if (me == 0) {
-        fp = fopen(arg[iarg+1],"w");
-        if (fp == NULL) {
-          char str[128];
-          snprintf(str,128,"Cannot open fix ave/time file %s",arg[iarg+1]);
-          error->one(FLERR,str);
-        }
-      }
-      iarg += 2;
-    } else if (strcmp(arg[iarg],"viscosity") == 0) {
-      TYPE = VISCOSITY;
-      iarg += 1;
-    } else if (strcmp(arg[iarg],"ave") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ave/time command");
-      if (strcmp(arg[iarg+1],"one") == 0) ave = ONE;
-      else if (strcmp(arg[iarg+1],"running") == 0) ave = RUNNING;
-      else if (strcmp(arg[iarg+1],"window") == 0) ave = WINDOW;
-      else error->all(FLERR,"Illegal fix ave/time command");
-      if (ave == WINDOW) {
-        if (iarg+3 > narg) error->all(FLERR,"Illegal fix ave/time command");
-        nwindow = force->inumeric(FLERR,arg[iarg+2]);
-        if (nwindow <= 0) error->all(FLERR,"Illegal fix ave/time command");
-      }
-      iarg += 2;
-      if (ave == WINDOW) iarg++;
-    } else if (strcmp(arg[iarg],"off") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ave/time command");
-      memory->grow(offlist,noff+1,"ave/time:offlist");
-      offlist[noff++] = force->inumeric(FLERR,arg[iarg+1]);
-      iarg += 2;
-    } else if (strcmp(arg[iarg],"overwrite") == 0) {
-      overwrite = 1;
-      iarg += 1;
+        if (mode == DIFFUSIVITY || mode == VISCOSITY) {
+          if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
+          filename1 = arg[iarg+1];
+          filename2 = arg[iarg+2];
+          iarg += 3;
+        } else if (mode == THERMCOND) {
+          if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
+          filename1 = arg[iarg+1];
+          iarg += 2;
+        } else error->all(FLERR,"Illegal fix ave/time command");
     } else if (strcmp(arg[iarg],"format") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix ave/time command");
       delete [] format_user;
@@ -149,26 +132,12 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       sprintf(format_user," %s",arg[iarg+1]);
       format = format_user;
       iarg += 2;
-    } else if (strcmp(arg[iarg],"title1") == 0) {
+    } else if (strcmp(arg[iarg],"title") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
-      delete [] title1;
+      delete [] title;
       int n = strlen(arg[iarg+1]) + 1;
-      title1 = new char[n];
-      strcpy(title1,arg[iarg+1]);
-      iarg += 2;
-    } else if (strcmp(arg[iarg],"title2") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
-      delete [] title2;
-      int n = strlen(arg[iarg+1]) + 1;
-      title2 = new char[n];
-      strcpy(title2,arg[iarg+1]);
-      iarg += 2;
-    } else if (strcmp(arg[iarg],"title3") == 0) {
-      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
-      delete [] title3;
-      int n = strlen(arg[iarg+1]) + 1;
-      title3 = new char[n];
-      strcpy(title3,arg[iarg+1]);
+      title = new char[n];
+      strcpy(title,arg[iarg+1]);
       iarg += 2;
     } else error->all(FLERR,"Illegal fix ave/time command");
   }
@@ -177,47 +146,28 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  /* START COMPLETE DELETE */
 
   // expand args if any have wildcard character "*"
   // this can reset nvalues
 
-  int expand = 0;
-  char **earg;
-  nvalues = input->expand_args(nvalues,&arg[6],mode,earg);
+  //int expand = 0;
+  //char **earg;
+  //nvalues = input->expand_args(nvalues,&arg[6],VECTOR,earg);
 
-  if (earg != &arg[6]) expand = 1;
-  arg = earg;
+  //if (earg != &arg[6]) expand = 1;
+  //arg = earg;
 
   // parse values
 
-  which = new int[nvalues];
-  argindex = new int[nvalues];
-  value2index = new int[nvalues];
-  offcol = new int[nvalues];
-  varlen = new int[nvalues];
-  ids = new char*[nvalues];
+  //which = new int[nvalues];           // COMPUTE, VARIABLE, FIX
+  //argindex = new int[nvalues];        // Index of each property
+  //value2index = new int[nvalues];     // The conversion from ID of a property to its value
+  //offcol = new int[nvalues];          // Irrelevant as no array
+  //varlen = new int[nvalues];        // NOT NEEDED
+  //ids = new char*[nvalues];
 
-  for (int i = 0; i < nvalues; i++) {
+  /*for (int i = 0; i < nvalues; i++) {
     if (arg[i][0] == 'c') which[i] = COMPUTE;
     else if (arg[i][0] == 'f') which[i] = FIX;
     else if (arg[i][0] == 'v') which[i] = VARIABLE;
@@ -238,29 +188,59 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     ids[i] = new char[n];
     strcpy(ids[i],suffix);
     delete [] suffix;
-  }
+  }*/
 
   // set off columns now that nvalues is finalized
 
-  for (int i = 0; i < nvalues; i++) offcol[i] = 0;
+  /*for (int i = 0; i < nvalues; i++) offcol[i] = 0;
   for (int i = 0; i < noff; i++) {
     if (offlist[i] < 1 || offlist[i] > nvalues)
       error->all(FLERR,"Invalid fix ave/time off column");
     offcol[offlist[i]-1] = 1;
-  }
+  }*/
+
+  /* FINISH COMPLETE DELETE */
+
 
   // setup and error check
   // for fix inputs, check that fix frequency is acceptable
   // set variable_length if any compute is variable length
+  if (nevery <= 0 || nfreq <= 0)
+    error->all(FLERR,"Illegal fix ave/time command");
+  if (nfreq % nevery)
+    error->all(FLERR,"Illegal fix ave/time command");
+  int icompute = modify->find_compute(idcompute);
+  if (icompute < 0)
+    error->all(FLERR,"Compute ID for fix ave/time does not exist");
+  if (modify->compute[icompute]->vector_flag == 0)
+    error->all(FLERR,"Fix ave/time compute does not calculate a vector");
+  if (modify->compute[icompute]->size_vector_variable)
+    error->all(FLERR,"The size of the vector should be kept fixed");
 
-  if (nevery <= 0 || nrepeat <= 0 || nfreq <= 0)
-    error->all(FLERR,"Illegal fix ave/time command");
-  if (nfreq % nevery || nrepeat*nevery > nfreq)
-    error->all(FLERR,"Illegal fix ave/time command");
-  if (ave != RUNNING && overwrite)
-    error->all(FLERR,"Illegal fix ave/time command");
+  nrows = modify->compute[icompute]->size_vector; // get the number of rows
+  Compute *compute = modify->compute[modify->find_compute(idcompute)];  // the whole compute class
+  if (mode == DIFFUSIVITY)
+    numgroup = group->ngroup;            // The total # of available groups
+    // DOUBLE CHECK:  find the ID of groups to name them for diffusion
 
-  for (int i = 0; i < nvalues; i++) {
+  // This fix produces only a SCALAR value that I don't know yet (DOUBLE CHECK)
+  scalar_flag = 1;
+  extscalar = compute->extscalar;
+
+
+
+
+
+
+  // NOTE: None of compute commands are variable length; thus, no LOCK is needed
+
+
+
+
+
+  /* START COMPLETE DELETE */
+
+  /* for (int i = 0; i < nvalues; i++) {
     varlen[i] = 0;
 
     if (which[i] == COMPUTE && mode == VECTOR) {
@@ -278,7 +258,6 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
         varlen[i] = 1;
       if (argindex[i] && modify->compute[icompute]->size_array_rows_variable)
         varlen[i] = 1;
-
     } else if (which[i] == FIX && mode == VECTOR) {
       int ifix = modify->find_fix(ids[i]);
       if (ifix < 0)
@@ -305,33 +284,35 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
         error->all(FLERR,"Fix ave/time mode vector variable cannot be indexed");
       varlen[i] = 1;
     }
-  }
+  } */
 
   // all_variable_length = 1 if all values are variable length
   // any_variable_length = 1 if any values are variable length
 
+  /*
   all_variable_length = 1;
   any_variable_length = 0;
   for (int i = 0; i < nvalues; i++) {
     if (varlen[i] == 0) all_variable_length = 0;
     if (varlen[i]) any_variable_length = 1;
   }
+  */
 
   // if VECTOR mode, check that all columns are same length
   // nrows = # of rows in output array
   // if all columns are variable length, just set nrows = 1 for now
 
-  column = NULL;
+  /*column = NULL;
   if (all_variable_length == 0) 
     error->all(FLERR,"Fix ordern does not accept arrays");
-  else nrows = 1;
+  else nrows = 1;*/
 
 
   // enable locking of row count by this fix for computes of variable length
   // only if nrepeat > 1 or ave = RUNNING/WINDOW,
   //   so that locking spans multiple timesteps
 
-  if (any_variable_length &&
+  /*if (any_variable_length &&
       (nrepeat > 1 || ave == RUNNING || ave == WINDOW)) {
     for (int i = 0; i < nvalues; i++)
       if (varlen[i] && which[i] == COMPUTE) {
@@ -339,49 +320,93 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
         modify->compute[icompute]->lock_enable();
       }
     lockforever = 0;
-  }
+  }*/
 
   // print file comment lines
   // for mode = VECTOR, cannot use arg to print
   // since array args may have been expanded to multiple vectors
 
-  if (fp && me == 0) {
-    clearerr(fp);
-    if (title1) fprintf(fp,"%s\n",title1);
-    else fprintf(fp,"# Time-averaged data for fix %s\n",id);
-    if (title2) fprintf(fp,"%s\n",title2);
-    else if (mode == SCALAR) {
-      fprintf(fp,"# TimeStep");
-      for (int i = 0; i < nvalues; i++) fprintf(fp," %s",earg[i]);
-      fprintf(fp,"\n");
-    } else fprintf(fp,"# TimeStep Number-of-rows\n");
-    if (title3 && mode == VECTOR) fprintf(fp,"%s\n",title3);
-    else if (mode == VECTOR) {
-      fprintf(fp,"# Row");
-      for (int i = 0; i < nvalues; i++) fprintf(fp," %s",earg[i]);
-      fprintf(fp,"\n");
+
+// Opening new files to output data
+if (me == 0)  {
+  if (mode == DIFFUSIVITY || mode == VISCOSITY) {
+    if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
+      fp1 = fopen(filename1,"w");
+      fp2 = fopen(filename2,"w");
+      if (fp1 == NULL || fp2 == NULL) {
+        error->all(FLERR,"Cannot open fix ordern files");
+      }
+    } else if (mode == THERMCOND) {
+      fp1 = fopen(filename1,"w");
+      if (fp1 == NULL) {
+        char str[128];
+        snprintf(str,128,"Cannot open fix ordern file %s",filename1);
+        error->one(FLERR,str);
+      }
     }
-    if (ferror(fp))
-      error->one(FLERR,"Error writing file header");
-
-    filepos = ftell(fp);
   }
-
-  delete [] title1;
-  delete [] title2;
-  delete [] title3;
+  // Writing the header lines to files
+  if (fp1 && me == 0) {
+    clearerr(fp1);
+    if (title) fprintf(fp1,"%s\n",title);
+    if (mode == DIFFUSIVITY)  {
+      fprintf(fp1,"#NOTE: divide self-diffusivities by the number of molecules of species i (N_i).");
+      fprintf(fp1,"#Time\t");
+      for (int k = 0; k <= numgroup; k++) {
+        fprintf(fp1,"Ds__%s\t",group->names[tmpgroup[k][0]]);      // DOUBLE CHECK  (tmpgroup)
+      }
+      fprintf(fp1,"\n");
+    } else if (mode == VISCOSITY) {
+      fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).");
+      fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\teta_xy\teta_xz\teta_yz\teta_off\teta_total\n");
+    } else if (mode == THERMCOND) {
+      fprintf(fp1,"#Time\tlambda_x\tlambda_y\tlambda_z\tlambda_total\n");
+    }
+    if (ferror(fp1)) error->one(FLERR,"Error writing file header");
+    filepos1 = ftell(fp1);
+    if (fp2)  {
+      clearerr(fp2);
+      if (title) fprintf(fp2,"%s\n",title);
+      if (mode == DIFFUSIVITY) {
+        fprintf(fp2,"#NOTE: divide Onsager coefficients by the total number of molecules (N).");
+        fprintf(fp2,"#Time\t");
+        for (int k = 0; k <= numgroup; k++) {
+          for (int l = 0; l <= k; l++) {
+          fprintf(fp2,"Lambda__%s_%s\t",group->names[tmpgroup[k][0]],group->names[tmpgroup[l][0]]); // DOUBLE CHECK (tmpgroup)
+        }
+        fprintf(fp1,"\n");
+      } else if (mode == VISCOSITY) {
+        fprintf(fp2,"#NOTE: divide bulk viscosities by the temperature (T).");
+        fprintf(fp2,"#Time\tetab_xx\tetab_yy\tetab_zz\tetab_total\n");
+      }
+    if (ferror(fp2)) error->one(FLERR,"Error writing file header");
+    filepos2 = ftell(fp2);
+    }    
+  }
+  delete [] title;
 
   // if wildcard expansion occurred, free earg memory from expand_args()
   // wait to do this until after file comment lines are printed
 
-  if (expand) {
+  /*if (expand) {
     for (int i = 0; i < nvalues; i++) delete [] earg[i];
     memory->sfree(earg);
-  }
+  }*/
 
   // allocate memory for averaging
+  // DOUBLE CHECK: ADD All arrays here
+  if (mode == DIFFUSIVITY)  {
+    int define_arrays = 0;
+  } else if (mode == VISCOSITY) {
+    int define_arrays = 0;
+  } else if (mode == THERMCOND) {
+    int define_arrays = 0;
+  }
 
-  vector = vector_total = NULL;
+
+  
+
+  /*vector = vector_total = NULL;
   vector_list = NULL;
   array = array_total = NULL;
   array_list = NULL;
@@ -391,16 +416,40 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     vector_total = new double[nvalues];
     if (ave == WINDOW)
       memory->create(vector_list,nwindow,nvalues,"ave/time:vector_list");
-  } else allocate_arrays();
+  } else allocate_arrays();*/
 
   // this fix produces either a global scalar or vector or array
   // SCALAR mode produces either a scalar or vector
   // VECTOR mode produces either a vector or array
   // intensive/extensive flags set by compute,fix,variable that produces value
 
-  extlist = NULL;
+  //extlist = NULL;
 
-  if (mode == SCALAR) {
+
+
+  if (nvalues == 1) {
+    vector_flag = 1;
+    size_vector = nrows;
+    if (all_variable_length) size_vector_variable = 1;
+    if (which[0] == COMPUTE) {
+      Compute *compute = modify->compute[modify->find_compute(ids[0])];
+      if (argindex[0] == 0) {
+        extvector = compute->extvector;
+        if (extvector == -1) {
+          extlist = new int[nrows];
+          for (int i = 0; i < nrows; i++) extlist[i] = compute->extlist[i];
+          }
+      } else extvector = compute->extarray;
+    } else if (which[0] == VARIABLE) {
+        extlist = new int[nrows];
+        for (int i = 0; i < nrows; i++) extlist[i] = 0;
+      }
+
+  }
+
+
+
+  /*if (mode == SCALAR) {
     if (nvalues == 1) {
       scalar_flag = 1;
       if (which[0] == COMPUTE) {
@@ -494,18 +543,19 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
                      "intensive/extensive from these inputs");
       }
     }
-  }
+  }*/
 
   // initializations
   // set vector_total to zero since it accumulates
   // array_total already zeroed in allocate_arrays
 
-  irepeat = 0;
+  /*irepeat = 0;
   iwindow = window_limit = 0;
   norm = 0;
 
   if (mode == SCALAR)
     for (int i = 0; i < nvalues; i++) vector_total[i] = 0.0;
+  */
 
   // nvalid = next step on which end_of_step does something
   // add nvalid to all computes that store invocation times
@@ -523,7 +573,7 @@ FixOrderN::~FixOrderN()
 {
   // decrement lock counter in compute chunk/atom, it if still exists
 
-  if (any_variable_length &&
+  /*if (any_variable_length &&
       (nrepeat > 1 || ave == RUNNING || ave == WINDOW)) {
     for (int i = 0; i < nvalues; i++)
       if (varlen[i]) {
@@ -534,29 +584,39 @@ FixOrderN::~FixOrderN()
           modify->compute[icompute]->lock_disable();
         }
       }
-  }
+  }*/
 
   delete [] format_user;
+  if (fp1 && me == 0) fclose(fp1);
+  if (fp2 && me == 0) fclose(fp2);
+  // DOUBLE CHECK: DELETE All arrays here
+  if (mode == DIFFUSIVITY)  {
+    int define_arrays = 0;
+  } else if (mode == VISCOSITY) {
+    int define_arrays = 0;
+  } else if (mode == THERMCOND) {
+    int define_arrays = 0;
+  }
 
-  delete [] which;
-  delete [] argindex;
-  delete [] value2index;
-  delete [] offcol;
-  delete [] varlen;
-  for (int i = 0; i < nvalues; i++) delete [] ids[i];
-  delete [] ids;
 
-  delete [] extlist;
+  //delete [] which;
+  //delete [] argindex;
+  //delete [] value2index;
+  //delete [] offcol;
+  //delete [] varlen;
+  //for (int i = 0; i < nvalues; i++) delete [] ids[i];
+  //delete [] ids;
 
-  if (fp && me == 0) fclose(fp);
+  //delete [] extlist;
 
-  memory->destroy(column);
 
-  delete [] vector;
-  delete [] vector_total;
-  memory->destroy(array);
-  memory->destroy(array_total);
-  memory->destroy(array_list);
+  //memory->destroy(column);
+
+  //delete [] vector;
+  //delete [] vector_total;
+  //memory->destroy(array);
+  //memory->destroy(array_total);
+  //memory->destroy(array_list);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -573,30 +633,11 @@ int FixOrderN::setmask()
 void FixOrderN::init()
 {
   // set current indices for all computes,fixes,variables
-
-  for (int i = 0; i < nvalues; i++) {
-    if (which[i] == COMPUTE) {
-      int icompute = modify->find_compute(ids[i]);
-      if (icompute < 0)
-        error->all(FLERR,"Compute ID for fix ave/time does not exist");
-      value2index[i] = icompute;
-    } else if (which[i] == FIX) {
-      int ifix = modify->find_fix(ids[i]);
-      if (ifix < 0)
-        error->all(FLERR,"Fix ID for fix ave/time does not exist");
-      value2index[i] = ifix;
-    } else if (which[i] == VARIABLE) {
-      int ivariable = input->variable->find(ids[i]);
-      if (ivariable < 0)
-        error->all(FLERR,"Variable name for fix ave/time does not exist");
-      value2index[i] = ivariable;
-    }
-  }
-
+  int icompute = modify->find_compute(idcompute);
+  if (icompute < 0)
+    error->all(FLERR,"Compute ID for fix ordern does not exist");    
   // need to reset nvalid if nvalid < ntimestep b/c minimize was performed
-
   if (nvalid < update->ntimestep) {
-    irepeat = 0;
     nvalid = nextvalid();
     modify->addstep_compute_all(nvalid);
   }
@@ -625,13 +666,6 @@ void FixOrderN::end_of_step()
   nvalid_last = nvalid;
 
   invoke_vector(ntimestep);
-
-
-
-
-
-
-
 }
 
 /* ---------------------------------------------------------------------- */
@@ -889,11 +923,12 @@ void FixOrderN::allocate_arrays()
    startstep is lower bound on nfreq multiple
 ------------------------------------------------------------------------- */
 
+// DOUBLE CHECK: make it correct
 bigint FixOrderN::nextvalid()
 {
   bigint nvalid = (update->ntimestep/nfreq)*nfreq + nfreq;
   while (nvalid < startstep) nvalid += nfreq;
-  if (nvalid-nfreq == update->ntimestep && nrepeat == 1)
+  if (nvalid-nfreq == update->ntimestep)
     nvalid = update->ntimestep;
   else
     nvalid -= (nrepeat-1)*nevery;
