@@ -33,11 +33,14 @@ class ComputePosition : public Compute {
   void init();
   virtual void compute_vector();
   //void set_arrays(int);  TB: not needed if we want to get the current position
-  #define MAX_NUMBER_OF_BLOCKS            10
+/*
+TB: not needed if we create the BLOCKs in the fix
+  //#define MAX_NUMBER_OF_BLOCKS            10
   #define MAX_NUMBER_OF_BLOCKELEMENTS     10
   #define MAX_NUMBER_OF_ATOMS         100000
   #define MAX_NUMBER_OF_TYPES             32
   #define SQR(x) ((x)*(x))
+*/
  
  protected:
   //int comflag;   // comflag = 1 if reference moves with center of mass
@@ -53,13 +56,16 @@ class ComputePosition : public Compute {
   int *tmprecvcnts; // Number of atoms per each processor [array]
   int *recvcnts; // Number of atoms per each processor [array]
   int *displs; // Displacement array for receiving the correct data set from each processor [array]
-  double sendbuff [MAX_NUMBER_OF_ATOMS*5]; // The sending array from all processors
-  double recvbuff [MAX_NUMBER_OF_ATOMS*5]; // The receiving array from all processors
+  double *sendbuff; // The sending array from all processors
+  
+  //TB: not needed if we copy it directly to the vector
+  //double recvbuff [MAX_NUMBER_OF_ATOMS*5]; // The receiving array from all processors
+
   //int groupatom1, groupatom2;
   //double timeinterval;
   //int samplerate;
-  int count , NumberOfBlocks ;
-  int realatom;	// The tag of each atom in the global simulation system
+  //int count; // , NumberOfBlocks ;
+  //int realatom;	// The tag of each atom in the global simulation system
 
   // Storing the main data for the order-n algorithm
   //double ****BlockDATA;  

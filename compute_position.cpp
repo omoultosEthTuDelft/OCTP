@@ -46,9 +46,9 @@ ComputePosition::ComputePosition(LAMMPS *lmp, int narg, char **arg) :
 //TB: maybe important for the created vector!!!
 //TB: yes these are necessary to compute the vector
   vector_flag = 1;
-  size_vector = 4;
+  size_vector = atom->natoms*5;
   extvector = 0;
-  create_attribute = 1;
+  create_attribute = 0; //TB: we do not need to store anything
 
   // optional args
 /*
@@ -133,7 +133,7 @@ ComputePosition::ComputePosition(LAMMPS *lmp, int narg, char **arg) :
 */
   // displacement vector
   
-  vector = new double[4];  //TB: This has to be changed [4] -> natoms*5 or MAX_NUMBER_ATOMS*5
+  vector = new double[size_vector];  //TB: This has to be changed [4] -> natoms*5 or MAX_NUMBER_ATOMS*5
 
   // SJ: Start changing //
   MPI_Comm_rank(world, &me);            // Assigning the rank of a molecule for each core
@@ -141,6 +141,7 @@ ComputePosition::ComputePosition(LAMMPS *lmp, int narg, char **arg) :
   tmprecvcnts = new int[nprocs]; 
   recvcnts = new int[nprocs];
   displs = new int[nprocs];
+  sendbuff = new double[size_vector];  //TB: added to change size
 
   //TB: what is memory->create good for?
   //memory->create(BlockDATA,MAX_NUMBER_OF_BLOCKS,atom->natoms,MAX_NUMBER_OF_BLOCKELEMENTS,3,"compute/msd_norder:BlockDATA");
@@ -163,6 +164,7 @@ ComputePosition::~ComputePosition()
   delete [] tmprecvcnts;
   delete [] recvcnts;
   delete [] displs;
+  delete [] sendbuff; //TB: added to change size
   //memory->destroy(BlockDATA);
   // SJ: end changing //
 }
@@ -188,12 +190,12 @@ void ComputePosition::init()
   // SJ: start changing //
   //WriteFileEvery = 10000;  
   //tmpnumgroup = 0;
-  count = 0;
-  NumberOfBlocks = 1;
-  //for (int ii = 0; ii< MAX_NUMBER_OF_BLOCKS; ii++)
-  //{
-  //    BlockLength[ii]=1;
-  //}
+  //count = 0;
+  //NumberOfBlocks = 1;
+  for (int ii = 0; ii < size_vector; ii++)
+  {
+      vector[ii]=-1.0;
+  }
   // SJ: end changing //
 
 }
@@ -270,11 +272,11 @@ void ComputePosition::compute_vector()
 	ytmp = x[i][1] + ybox*yprd;
 	ztmp = x[i][2] + zbox*zprd;
         // SJ: start chaning //
-	realatom = (atom->tag[i]) - 1;
+	//realatom = (atom->tag[i]) - 1; //TB: not needed
 	sendbuff[5*i] = xtmp;
 	sendbuff[5*i+1] = ytmp;
 	sendbuff[5*i+2] = ztmp;
-	sendbuff[5*i+3] = (double) realatom;
+	sendbuff[5*i+3] = (double) ((atom->tag[i]) - 1);
 	sendbuff[5*i+4] = (double) mask[i];
         // SJ: end changing //
 
@@ -305,11 +307,11 @@ void ComputePosition::compute_vector()
         ytmp = x[i][1] + h[1]*ybox + h[3]*zbox;
         ztmp = x[i][2] + h[2]*zbox;
         // SJ: start chaning //
-	realatom = (atom->tag[i]) - 1;
+	//realatom = (atom->tag[i]) - 1;
 	sendbuff[5*i] = xtmp;
 	sendbuff[5*i+1] = ytmp;
 	sendbuff[5*i+2] = ztmp;
-	sendbuff[5*i+3] = (double) realatom;
+	sendbuff[5*i+3] = (double) ((atom->tag[i]) - 1);
 	sendbuff[5*i+4] = (double) mask[i];
         // SJ: end changing //
 
@@ -344,13 +346,13 @@ void ComputePosition::compute_vector()
       if (ii == 0) displs[jj] = 0;
       else displs[jj] += recvcnts[ii-1];
     }
-  MPI_Allgatherv(sendbuff,5*nlocal, MPI_DOUBLE, recvbuff, recvcnts, displs, MPI_DOUBLE, world);
+  MPI_Allgatherv(sendbuff,5*nlocal, MPI_DOUBLE, vector, recvcnts, displs, MPI_DOUBLE, world);
 
   //TB: test start -> this has to be changed -> only to test if the program will compile
-    vector[0] = 0.0;
-    vector[1] = 1.0;
-    vector[2] = 2.0;
-    vector[3] = 3.0;
+    //vector[0] = 0.0;
+    //vector[1] = 1.0;
+    //vector[2] = 2.0;
+    //vector[3] = 3.0;
   //TB: test end
   
 
