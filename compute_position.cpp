@@ -340,11 +340,18 @@ void ComputePosition::compute_vector()
   for (int ii = 0; ii < nprocs; ii++) 
     tmprecvcnts[ii] = (ii == me) ?  5*nlocal : 0 ;
   MPI_Allreduce(tmprecvcnts, recvcnts, nprocs, MPI_INT , MPI_SUM, world);
+
+//TB: is it possible to change the loop to make it more efficient?
+
   for (int ii = 0; ii < nprocs; ii++)
+  {
+    displs[ii] = 0;
+  }
+  for (int ii = 1; ii < nprocs; ii++)
     for (int jj = ii; jj < nprocs ; jj++)
     {
-      if (ii == 0) displs[jj] = 0;
-      else displs[jj] += recvcnts[ii-1];
+      //if (ii == 0) displs[jj] = 0;
+      displs[jj] += recvcnts[ii-1];
     }
   MPI_Allgatherv(sendbuff,5*nlocal, MPI_DOUBLE, vector, recvcnts, displs, MPI_DOUBLE, world);
 
