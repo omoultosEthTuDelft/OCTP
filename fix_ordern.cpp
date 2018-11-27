@@ -1,4 +1,15 @@
 /* ----------------------------------------------------------------------
+   fix ordern is a child class of "fix", developed based on two classes
+   of "fix ave/time" and "fix ave/correlate/long", provided in LAMMPS.
+   This command is distributed under the GNU General Public License.
+------------------------------------------------------------------------- */
+
+  //char str[128];
+  //snprintf(str,128,"Cannot open fix ordern file %sQQQ",filename2);
+  //error->one(FLERR,str);
+
+
+/* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
    http://lammps.sandia.gov, Sandia National Laboratories
    Steve Plimpton, sjplimp@sandia.gov
@@ -18,7 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
-#include "fix_ave_time.h"
+#include "fix_ordern.h"
 #include "update.h"
 #include "force.h"
 #include "modify.h"
@@ -28,6 +39,9 @@
 #include "memory.h"
 #include "error.h"
 
+#include "group.h"
+
+
 using namespace LAMMPS_NS;
 using namespace FixConst;
 
@@ -36,9 +50,8 @@ using namespace FixConst;
 enum{SCALAR,VECTOR};
 enum{VISCOSITY,THERMCOND,DIFFUSIVITY};
 
-//#define INVOKED_SCALAR 1
 #define INVOKED_VECTOR 2
-//#define INVOKED_ARRAY 4
+
 
 /* ---------------------------------------------------------------------- */
 
@@ -58,7 +71,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // Initial values
   fp1 = NULL;
   fp2 = NULL;
-  //startstep = 0;
+  startstep = 0;
   //noff = 0;
   //offlist = NULL;
   format_user = NULL;
@@ -68,15 +81,30 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // Define the type of transport property calculation
   if (strcmp(arg[3],"diffusivity") == 0) {
     mode = DIFFUSIVITY;
-    filename1 = "selfdiffusivity.dat";
-    filename2 = "onsagercoefficients.dat";
+    char filen1[] = "selfdiffusivity.dat";
+    filename1 = new char[strlen(filen1)+1];
+    strcpy(filename1,filen1);
+    //delete [] filen1;
+    char filen2[] = "onsagercoefficients.dat";
+    filename2 = new char[strlen(filen2)+1];
+    strcpy(filename2,filen2);
+    //delete [] filen2;
   } else if (strcmp(arg[3],"viscosity") == 0) {
     mode = VISCOSITY;
-    filename1 = "shearviscosity.dat";
-    filename2 = "bulkviscosity.dat";
-  } else if (strcmp(arg[3],"thermcond") == 0) {
+    char filen1[] = "shearviscosity.dat";
+    filename1 = new char[strlen(filen1)+1];
+    strcpy(filename1,filen1);   
+    //delete [] filen1;
+    char filen2[] = "bulkviscosity.dat";
+    filename2 = new char[strlen(filen2)+1];
+    strcpy(filename2,filen2);
+    //delete [] filen2;
+  } else if (strcmp(arg[3],"thermalconductivity") == 0) {
     mode = THERMCOND;
-    filename1 = "thermalconductivity.dat";
+    char filen1[] = "thermalconductivity.dat";
+    filename1 = new char[strlen(filen1)+1];
+    strcpy(filename1,filen1);
+    //delete [] filen1;
     filename2 = NULL;
   } else 
     error->all(FLERR,"Illegal fix ordern command with no transport property");
@@ -93,38 +121,48 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   while (iarg < narg) {
     if ((strncmp(arg[iarg],"c_",2) == 0)) {
       nvalues++;
+      iarg++;
     } else break;
   }
   if (nvalues == 0) error->all(FLERR,"No values in fix ordern command");
   if (nvalues > 1) error->all(FLERR,"More than 1 value in fix ordern command");
 
   // getting the ID of compute for the transport property
-  int n = strlen(arg[iarg]);
-  char *suffix = new char[n];
-  strcpy(suffix,&arg[i][2]);
+  char *suffix = new char[strlen(arg[6])];
+  strcpy(suffix,&arg[6][2]);
   char *ptr = strchr(suffix,'[');
   if (ptr) error->all(FLERR,"All components of the compute are required for fix ordern");
-  n = strlen(suffix) + 1;
-  idcompute = new char[n];
+  idcompute = new char[strlen(suffix) + 1];
   strcpy(idcompute,suffix);
   delete [] suffix;
-
+  
   // Optional arguments
-  iarg++;
+  iarg = 7;
   while (iarg < narg) {
     // add more file options for mode == visocisty/diffusion/thermcond
     if (strcmp(arg[iarg],"file") == 0) {
         if (mode == DIFFUSIVITY || mode == VISCOSITY) {
           if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
-          filename1 = arg[iarg+1];
-          filename2 = arg[iarg+2];
+          delete [] filename1;
+          filename1 = new char[strlen(arg[iarg+1])+1];
+          strcpy(filename1,arg[iarg+1]);
+          delete [] filename2;
+          filename2 = new char[strlen(arg[iarg+2])+1];
+          strcpy(filename2,arg[iarg+2]);
           iarg += 3;
         } else if (mode == THERMCOND) {
           if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
-          filename1 = arg[iarg+1];
+          delete [] filename1;
+          filename1 = new char[strlen(arg[iarg+1])+1];
+          strcpy(filename1,arg[iarg+1]);
           iarg += 2;
-        } else error->all(FLERR,"Illegal fix ave/time command");
-    } else if (strcmp(arg[iarg],"format") == 0) {
+        } else error->all(FLERR,"Illegal fix ordern command");
+    } else if (strcmp(arg[iarg],"start") == 0) {
+      if (iarg+2 > narg)
+        error->all(FLERR,"Illegal fix ordern command");
+      startstep = force->inumeric(FLERR,arg[iarg+1]);
+      iarg += 2;
+    }  else if (strcmp(arg[iarg],"format") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix ave/time command");
       delete [] format_user;
       int n = strlen(arg[iarg+1]) + 2;
@@ -141,6 +179,10 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       iarg += 2;
     } else error->all(FLERR,"Illegal fix ave/time command");
   }
+
+  /*char str[128];
+  snprintf(str,128,"Cannot open fix ordern file %sQQQ",idcompute);
+  error->one(FLERR,str);*/
 
 
 
@@ -205,27 +247,27 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // setup and error check
   // for fix inputs, check that fix frequency is acceptable
   // set variable_length if any compute is variable length
-  if (nevery <= 0 || nfreq <= 0)
-    error->all(FLERR,"Illegal fix ave/time command");
+  if (nevery <= 0 || nfreq <= 0 || startstep < 0)
+    error->all(FLERR,"Illegal fix ordern command");
   if (nfreq % nevery)
-    error->all(FLERR,"Illegal fix ave/time command");
-  int icompute = modify->find_compute(idcompute);
+    error->all(FLERR,"Illegal fix ordern command: nevery should be a factor of nfreq");
+  if (startstep % nevery)
+    error->all(FLERR,"Illegal fix ordern command: nevery should be a factor of start");
+  icompute = modify->find_compute(idcompute);
   if (icompute < 0)
-    error->all(FLERR,"Compute ID for fix ave/time does not exist");
+    error->all(FLERR,"Compute ID for fix ordern does not exist");
   if (modify->compute[icompute]->vector_flag == 0)
-    error->all(FLERR,"Fix ave/time compute does not calculate a vector");
+    error->all(FLERR,"Fix ordern compute does not calculate a vector");
   if (modify->compute[icompute]->size_vector_variable)
     error->all(FLERR,"The size of the vector should be kept fixed");
 
   nrows = modify->compute[icompute]->size_vector; // get the number of rows
-  Compute *compute = modify->compute[modify->find_compute(idcompute)];  // the whole compute class
+  Compute *compute = modify->compute[icompute];  // the whole compute class
   if (mode == DIFFUSIVITY)
     numgroup = group->ngroup;            // The total # of available groups
     // DOUBLE CHECK:  find the ID of groups to name them for diffusion
 
-  // This fix produces only a SCALAR value that I don't know yet (DOUBLE CHECK)
-  scalar_flag = 1;
-  extscalar = compute->extscalar;
+
 
 
 
@@ -328,9 +370,8 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 
 
 // Opening new files to output data
-if (me == 0)  {
-  if (mode == DIFFUSIVITY || mode == VISCOSITY) {
-    if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
+  if (me == 0)  {
+    if (mode == DIFFUSIVITY || mode == VISCOSITY) {
       fp1 = fopen(filename1,"w");
       fp2 = fopen(filename2,"w");
       if (fp1 == NULL || fp2 == NULL) {
@@ -350,16 +391,17 @@ if (me == 0)  {
     clearerr(fp1);
     if (title) fprintf(fp1,"%s\n",title);
     if (mode == DIFFUSIVITY)  {
-      fprintf(fp1,"#NOTE: divide self-diffusivities by the number of molecules of species i (N_i).");
+      fprintf(fp1,"#NOTE: divide self-diffusivities by the number of molecules of species i (N_i).\n");
       fprintf(fp1,"#Time\t");
       for (int k = 0; k <= numgroup; k++) {
-        fprintf(fp1,"Ds__%s\t",group->names[tmpgroup[k][0]]);      // DOUBLE CHECK  (tmpgroup)
+        fprintf(fp1,"Ds__%s\t",group->names[k]);      // DOUBLE CHECK  (tmpgroup)
       }
       fprintf(fp1,"\n");
     } else if (mode == VISCOSITY) {
-      fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).");
+      fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).\n");
       fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\teta_xy\teta_xz\teta_yz\teta_off\teta_total\n");
     } else if (mode == THERMCOND) {
+      fprintf(fp1,"#NOTE: divide thermal conductivities by the temperature^2 (i.e.,T^2)).\n");
       fprintf(fp1,"#Time\tlambda_x\tlambda_y\tlambda_z\tlambda_total\n");
     }
     if (ferror(fp1)) error->one(FLERR,"Error writing file header");
@@ -368,16 +410,17 @@ if (me == 0)  {
       clearerr(fp2);
       if (title) fprintf(fp2,"%s\n",title);
       if (mode == DIFFUSIVITY) {
-        fprintf(fp2,"#NOTE: divide Onsager coefficients by the total number of molecules (N).");
+        fprintf(fp2,"#NOTE: divide Onsager coefficients by the total number of molecules (N).\n");
         fprintf(fp2,"#Time\t");
         for (int k = 0; k <= numgroup; k++) {
           for (int l = 0; l <= k; l++) {
-          fprintf(fp2,"Lambda__%s_%s\t",group->names[tmpgroup[k][0]],group->names[tmpgroup[l][0]]); // DOUBLE CHECK (tmpgroup)
+            fprintf(fp2,"Lambda__%s_%s\t",group->names[k],group->names[l]); // DOUBLE CHECK (tmpgroup)
+          }
         }
         fprintf(fp1,"\n");
       } else if (mode == VISCOSITY) {
-        fprintf(fp2,"#NOTE: divide bulk viscosities by the temperature (T).");
-        fprintf(fp2,"#Time\tetab_xx\tetab_yy\tetab_zz\tetab_total\n");
+        fprintf(fp2,"#NOTE: divide bulk viscosities by the temperature (T).\n");
+        fprintf(fp2,"#Time\teta_b_xx\teta_b_yy\teta_b_zz\teta_b_total\n");
       }
     if (ferror(fp2)) error->one(FLERR,"Error writing file header");
     filepos2 = ftell(fp2);
@@ -393,14 +436,31 @@ if (me == 0)  {
     memory->sfree(earg);
   }*/
 
-  // allocate memory for averaging
-  // DOUBLE CHECK: ADD All arrays here
+  // allocate memory for the order-n algorithm
+  // DOUBLE CHECK: ADD All arrays here (DOUBLE CHECK)
+
+  memory->create(recdata,nrows,"ordern:recdata");
+
   if (mode == DIFFUSIVITY)  {
+
     int define_arrays = 0;
+
   } else if (mode == VISCOSITY) {
+
+    count = -1;
+    numpressure = 0;
+    sumpressure = 0;
+    avgpressure = 0;
+    countint = 1;
+    NumberOfBlock = 1;
+    for (int i = 0; i < NUMBER_OF_BLOCKS; i++)
+      BlockLength[i]=1;
     int define_arrays = 0;
+
   } else if (mode == THERMCOND) {
+
     int define_arrays = 0;
+
   }
 
 
@@ -418,37 +478,18 @@ if (me == 0)  {
       memory->create(vector_list,nwindow,nvalues,"ave/time:vector_list");
   } else allocate_arrays();*/
 
+
+
   // this fix produces either a global scalar or vector or array
   // SCALAR mode produces either a scalar or vector
   // VECTOR mode produces either a vector or array
   // intensive/extensive flags set by compute,fix,variable that produces value
-
+    // This fix produces only a SCALAR value that I don't know yet (DOUBLE CHECK)
+  scalar_flag = 1;
+  extscalar = compute->extscalar;
+  
+  
   //extlist = NULL;
-
-
-
-  if (nvalues == 1) {
-    vector_flag = 1;
-    size_vector = nrows;
-    if (all_variable_length) size_vector_variable = 1;
-    if (which[0] == COMPUTE) {
-      Compute *compute = modify->compute[modify->find_compute(ids[0])];
-      if (argindex[0] == 0) {
-        extvector = compute->extvector;
-        if (extvector == -1) {
-          extlist = new int[nrows];
-          for (int i = 0; i < nrows; i++) extlist[i] = compute->extlist[i];
-          }
-      } else extvector = compute->extarray;
-    } else if (which[0] == VARIABLE) {
-        extlist = new int[nrows];
-        for (int i = 0; i < nrows; i++) extlist[i] = 0;
-      }
-
-  }
-
-
-
   /*if (mode == SCALAR) {
     if (nvalues == 1) {
       scalar_flag = 1;
@@ -561,10 +602,11 @@ if (me == 0)  {
   // add nvalid to all computes that store invocation times
   // since don't know a priori which are invoked by this fix
   // once in end_of_step() can set timestep for ones actually invoked
-
   nvalid_last = -1;
   nvalid = nextvalid();
   modify->addstep_compute_all(nvalid);
+
+
 }
 
 /* ---------------------------------------------------------------------- */
@@ -610,7 +652,7 @@ FixOrderN::~FixOrderN()
   //delete [] extlist;
 
 
-  //memory->destroy(column);
+  memory->destroy(recdata);
 
   //delete [] vector;
   //delete [] vector_total;
@@ -619,7 +661,9 @@ FixOrderN::~FixOrderN()
   //memory->destroy(array_list);
 }
 
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+   defines when fix can be called (at the end of step)
+------------------------------------------------------------------------- */
 
 int FixOrderN::setmask()
 {
@@ -628,13 +672,15 @@ int FixOrderN::setmask()
   return mask;
 }
 
-/* ---------------------------------------------------------------------- */
+/* ----------------------------------------------------------------------
+   Initializing the whole fix in Modify::init()
+------------------------------------------------------------------------- */
 
 void FixOrderN::init()
 {
   // set current indices for all computes,fixes,variables
-  int icompute = modify->find_compute(idcompute);
-  if (icompute < 0)
+  int icompute_new = modify->find_compute(idcompute);
+  if (icompute < 0 || icompute_new != icompute)
     error->all(FLERR,"Compute ID for fix ordern does not exist");    
   // need to reset nvalid if nvalid < ntimestep b/c minimize was performed
   if (nvalid < update->ntimestep) {
@@ -658,37 +704,23 @@ void FixOrderN::end_of_step()
 {
   // skip if not step which requires doing something
   // error check if timestep was reset in an invalid manner
-
   bigint ntimestep = update->ntimestep;
   if (ntimestep < nvalid_last || ntimestep > nvalid)
     error->all(FLERR,"Invalid timestep reset for fix ave/time");
   if (ntimestep != nvalid) return;
+  
+  // update the next timestep to call end_of_step()
   nvalid_last = nvalid;
+  nvalid += nevery;
+  modify->addstep_compute(nvalid);
 
-  invoke_vector(ntimestep);
-}
+  int i,j;
+  // DOUBLE CHECK: HOW TO DEFINE first timestep
 
-/* ---------------------------------------------------------------------- */
 
-void FixOrderN::invoke_vector(bigint ntimestep)
-{
-  int i,j,m;
+  /*if (irepeat == 0) {    
 
-  // first sample within single Nfreq epoch
-  // zero out arrays that accumulate over many samples, but not across epochs
-  // invoke setup_chunks() to determine current nchunk
-  //   re-allocate per-chunk arrays if needed
-  // invoke lock() in two cases:
-  //   if nrepeat > 1: so nchunk cannot change until Nfreq epoch is over,
-  //     will be unlocked on last repeat of this Nfreq
-  //   if ave = RUNNING/WINDOW and not yet locked:
-  //     set forever, will be unlocked in fix destructor
-  // wrap setup_chunks in clearstep/addstep b/c it may invoke computes
-  //   both nevery and nfreq are future steps,
-  //   since call below to cchunk->ichunk()
-  //     does not re-invoke internal cchunk compute on this same step
-
-  if (irepeat == 0) {
+    // DELET: THERE IS NO VARIABLE-SIZE COMPUTE
     if (any_variable_length) {
       modify->clearstep_compute();
       int nrows_new = column_length(1);
@@ -720,186 +752,55 @@ void FixOrderN::invoke_vector(bigint ntimestep)
 
     for (i = 0; i < nrows; i++)
       for (j = 0; j < nvalues; j++) array[i][j] = 0.0;
-  }
+  }*/
 
-  // accumulate results of computes,fixes,variables to local copy
-  // compute/fix/variable may invoke computes so wrap with clear/add
-
+  
+  // invoke compute vector if not previously invoked
+  // get the data from compute_vector and store it in recdata
+  // the size of recdata is nrows
   modify->clearstep_compute();
+  Compute *compute = modify->compute[icompute];  // the whole compute class
 
-  for (j = 0; j < nvalues; j++) {
-    m = value2index[j];
-
-    // invoke compute if not previously invoked
-
-    if (which[j] == COMPUTE) {
-      Compute *compute = modify->compute[m];
-
-      if (argindex[j] == 0) {
-        if (!(compute->invoked_flag & INVOKED_VECTOR)) {
-          compute->compute_vector();
-          compute->invoked_flag |= INVOKED_VECTOR;
-        }
-        double *cvector = compute->vector;
-        for (i = 0; i < nrows; i++)
-          column[i] = cvector[i];
-
-      } else {
-        if (!(compute->invoked_flag & INVOKED_ARRAY)) {
-          compute->compute_array();
-          compute->invoked_flag |= INVOKED_ARRAY;
-        }
-        double **carray = compute->array;
-        int icol = argindex[j]-1;
-        for (i = 0; i < nrows; i++)
-          column[i] = carray[i][icol];
-      }
-
-    // access fix fields, guaranteed to be ready
-
-    } else if (which[j] == FIX) {
-      Fix *fix = modify->fix[m];
-      if (argindex[j] == 0)
-        for (i = 0; i < nrows; i++)
-          column[i] = fix->compute_vector(i);
-      else {
-        int icol = argindex[j]-1;
-        for (i = 0; i < nrows; i++)
-          column[i] = fix->compute_array(i,icol);
-      }
-
-    // evaluate vector-style variable
-    // insure nvec = nrows, else error
-    // could be different on this timestep than when column_length(1) set nrows
-
-    } else if (which[j] == VARIABLE) {
-      double *varvec;
-      int nvec = input->variable->compute_vector(m,&varvec);
-      if (nvec != nrows)
-        error->all(FLERR,"Fix ave/time vector-style variable changed length");
-      for (i = 0; i < nrows; i++)
-        column[i] = varvec[i];
-    }
-
-    // add columns of values to array or just set directly if offcol is set
-
-    if (offcol[j]) {
-      for (i = 0; i < nrows; i++)
-        array[i][j] = column[i];
-    } else {
-      for (i = 0; i < nrows; i++)
-        array[i][j] += column[i];
-    }
-  } 
-
-  // done if irepeat < nrepeat
-  // else reset irepeat and nvalid
-
-  irepeat++;
-  if (irepeat < nrepeat) {
-    nvalid += nevery;
-    modify->addstep_compute(nvalid);
-    return;
+  if (!(compute->invoked_flag & INVOKED_VECTOR)) {
+    compute->compute_vector();
+    compute->invoked_flag |= INVOKED_VECTOR;
   }
-
-  irepeat = 0;
-  nvalid = ntimestep+nfreq - (nrepeat-1)*nevery;
-  modify->addstep_compute(nvalid);
-
-  // unlock any variable length computes at end of Nfreq epoch
-  // do not unlock if ave = RUNNING or WINDOW
-
-  if (any_variable_length && nrepeat > 1 && ave == ONE) {
-    for (i = 0; i < nvalues; i++) {
-      if (!varlen[i]) continue;
-      Compute *compute = modify->compute[value2index[i]];
-      compute->unlock(this);
-    }
-  }
-
-  // average the final result for the Nfreq timestep
-
-  double repeat = nrepeat;
+  double *cvector = compute->vector;
   for (i = 0; i < nrows; i++)
-    for (j = 0; j < nvalues; j++)
-      if (offcol[j] == 0) array[i][j] /= repeat;
+    recdata[i] = cvector[i];
 
-  // if ave = ONE, only single Nfreq timestep value is needed
-  // if ave = RUNNING, combine with all previous Nfreq timestep values
-  // if ave = WINDOW, combine with nwindow most recent Nfreq timestep values
 
-  if (ave == ONE) {
-    for (i = 0; i < nrows; i++)
-      for (j = 0; j < nvalues; j++) array_total[i][j] = array[i][j];
-    norm = 1;
+  if (ntimestep % nfreq)  return;
 
-  } else if (ave == RUNNING) {
-    for (i = 0; i < nrows; i++)
-      for (j = 0; j < nvalues; j++) array_total[i][j] += array[i][j];
-    norm++;
-
-  } else if (ave == WINDOW) {
-    for (i = 0; i < nrows; i++)
-      for (j = 0; j < nvalues; j++) {
-        array_total[i][j] += array[i][j];
-        if (window_limit) array_total[i][j] -= array_list[iwindow][i][j];
-        array_list[iwindow][i][j] = array[i][j];
-      }
-
-    iwindow++;
-    if (iwindow == nwindow) {
-      iwindow = 0;
-      window_limit = 1;
-    }
-    if (window_limit) norm = nwindow;
-    else norm = iwindow;
-  }
-
-  // insure any columns with offcol set are effectively set to last value
-
-  for (i = 0; i < nrows; i++)
-    for (j = 0; j < nvalues; j++)
-      if (offcol[j]) array_total[i][j] = norm*array[i][j];
-
-  // output result to file
-
-  if (fp && me == 0) {
-    if (overwrite) fseek(fp,filepos,SEEK_SET);
-    fprintf(fp,BIGINT_FORMAT " %d\n",ntimestep,nrows);
+  // OUTPUT RESULTS TO THE FILES (fp1 and fp2) IF TIME == nfreq
+  // DOUBLE CHECK
+  if (fp1 && me == 0) {
+    // getting the position to the end of header
+    fseek(fp1,filepos1,SEEK_SET);
+    // write the data 
+    fprintf(fp1,BIGINT_FORMAT " %d\n",ntimestep,nrows);
     for (i = 0; i < nrows; i++) {
-      fprintf(fp,"%d",i+1);
-      for (j = 0; j < nvalues; j++) fprintf(fp,format,array_total[i][j]/norm);
-      fprintf(fp,"\n");
+      //fprintf(fp1,"%d",i+1);
+      fprintf(fp1,format,recdata[i]);  // user-defined format
+      fprintf(fp1,"\n");
     }
-    fflush(fp);
-    if (overwrite) {
-      long fileend = ftell(fp);
-      if (fileend > 0) ftruncate(fileno(fp),fileend);
-    }
+    fflush(fp1);
+    // delete all unnecessary text from the output file
+    long fileend1 = ftell(fp1);
+    if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
   }
+  // DO THE SAME WITH fp2
+  // DOUBLE CHECK
+
 }
 
-
-/* ----------------------------------------------------------------------
-   return Ith vector value
-------------------------------------------------------------------------- */
-
-double FixOrderN::compute_vector(int i)
-{
-  if (i >= nrows) return 0.0;
-  if (norm) {
-    if (mode == SCALAR) return vector_total[i]/norm;
-    if (mode == VECTOR) return array_total[i][0]/norm;
-  }
-  return 0.0;
-}
 
 
 /* ----------------------------------------------------------------------
    reallocate arrays for mode = VECTOR of size Nrows x Nvalues
 ------------------------------------------------------------------------- */
 
-void FixOrderN::allocate_arrays()
+/*void FixOrderN::allocate_arrays()
 {
   memory->destroy(array);
   memory->destroy(array_total);
@@ -914,24 +815,18 @@ void FixOrderN::allocate_arrays()
 
   for (int i = 0; i < nrows; i++)
     for (int j = 0; j < nvalues; j++) array_total[i][j] = 0.0;
-}
+}*/
 
 /* ----------------------------------------------------------------------
    calculate nvalid = next step on which end_of_step does something
-   can be this timestep if multiple of nfreq and nrepeat = 1
-   else backup from next multiple of nfreq
-   startstep is lower bound on nfreq multiple
+   lower bound is the smallest multiple of nevery larger than startstep
+   used only in the initialization
 ------------------------------------------------------------------------- */
 
-// DOUBLE CHECK: make it correct
 bigint FixOrderN::nextvalid()
 {
-  bigint nvalid = (update->ntimestep/nfreq)*nfreq + nfreq;
-  while (nvalid < startstep) nvalid += nfreq;
-  if (nvalid-nfreq == update->ntimestep)
-    nvalid = update->ntimestep;
-  else
-    nvalid -= (nrepeat-1)*nevery;
-  if (nvalid < update->ntimestep) nvalid += nfreq;
+  bigint nvalid = update->ntimestep;
+  if (startstep > nvalid) nvalid = startstep;
+  if (nvalid % nevery) nvalid = (nvalid/nevery)*nevery+nevery;
   return nvalid;
 }

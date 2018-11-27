@@ -28,17 +28,18 @@ namespace LAMMPS_NS {
 class FixOrderN : public Fix {
  public:
   FixOrderN(class LAMMPS *, int, char **);  // constructor
-  ~FixOrderN();                             // destructor
-  int setmask();                            // the code is needed at the end of step
-  void init();
+  ~FixOrderN(); // destructor
+  int setmask();  // the code is needed at the end of step
+  void init();  // initialization
   void setup(int);
   void end_of_step();
 
-  void write_restart(FILE *);
-  void restart(char *);
-  double compute_scalar();
-  double compute_vector(int);
-  double compute_array(int,int);
+  #define NUMBER_OF_BLOCKS		10
+  #define NUMBER_OF_BLOCKELEMENTS	10
+
+  //void write_restart(FILE *);
+  //void restart(char *);
+  //double memory_usage();
 
  private:
 
@@ -48,13 +49,16 @@ class FixOrderN : public Fix {
   int nfreq;   // the frequency of writing files to disk
   int icompute; // the ID of compute for the tranpsort property
   int nrows;  // number of data passed to fix ordern via compute
+  int startstep;  // the first timestep that it starts sampling
 
-  bigint nvalid;        // WHAT IS IT???
-  bigint nvalid_last;   // WHAT IS IT???
+  bigint nvalid;        // the next(current) timestep to call end_of_step()
+  bigint nvalid_last;   // the previous timestep that end_of_step() was called
 
 
   long filepos1; // the location of header lines for file 1
   long filepos2; // the location of header lines for file 2
+
+  double *recdata; // data passed from compute to fix;
 
   char *filename1;  // filename for self-diffusion, shear viscosity, and conductivity
   char *filename2;  // filename for onsager coefficients and bulk viscosity
@@ -68,30 +72,45 @@ class FixOrderN : public Fix {
   FILE *fp2;  // output file 2 (onsager coefficients, bulk viscosity)
 
 
-  // DIFFUSION inputs
+  // DIFFUSIVITY vairables
   int numgroup; // number of groups
 
+  // VISCOSITY vairables
+  int samplerate;			// This is dt. Every 2dt an integration is carried out
+  double timeinterval;
+  int count, countint;			// how many cycles have been passed (count = countint*2)
+  double Pxx, Pyy, Pzz, Pxy, Pxz, Pyz;	//All stress tensor components 
+  double Pxx_s, Pyy_s, Pzz_s;		// traceless components
+  double pressure;			// The hydrostatic pressure: (Pxx+Pyy+Pzz)/3
+  double avgpressure;				// The average hydrostatic pressure
+  double sumpressure;				// The sum of hydrostatic pressure
+  double numpressure;				// The number of hydrostatic pressure
+  double tmpa[7], tmpb[7], tmpc[7];	// Temporary arrays for simpson's rule integration
+  double lastint[7];			// The last integral between t-2dt and t
+  double accint[7];			// The accumlative integral upto the newest timestep
+  double oldint[NUMBER_OF_BLOCKS][NUMBER_OF_BLOCKELEMENTS][7];	// The lowest bound of the integral
+  double integral;			// The integral we need to sample, i.e., "accint-oldint"
+  double samples[NUMBER_OF_BLOCKS][NUMBER_OF_BLOCKELEMENTS][8];		// samples of int(P^2) & int(P): 7+1
+  double samplecount[NUMBER_OF_BLOCKS][NUMBER_OF_BLOCKELEMENTS][8];	// total number of samples: 7+1 
+  int BlockLength[NUMBER_OF_BLOCKS];	// Length of each active block
+  int NumberOfBlock;			// Up to how which block, integration has been done
+  int CurrentBlockLength;		// 
 
+
+  // THERMCOND variables
+  
+  
+  // METHODS
+  bigint nextvalid();
+
+
+
+
+  // MAYBE LATER
 
   
-  //int me,nvalues;
-  //int nrepeat,nfreq,irepeat;
-  //bigint nvalid,nvalid_last;
-  //int *which,*argindex,*value2index,*offcol;
-  //int *varlen;               // 1 if value is from variable-length compute (NOT NEEDED)
-  //char **ids;
-  //FILE *fp;
-  //int any_variable_length;
-  //int all_variable_length;
-  //int lockforever;
 
-  //int ave,nwindow,mode;
   //int noff,overwrite;
-  //int *offlist;
-  //char *format,*format_user;
-  //char *title1,*title2,*title3;
-
-  //int norm,iwindow,window_limit;
   //double *vector;
   //double *vector_total;
   //double **vector_list;
@@ -100,12 +119,11 @@ class FixOrderN : public Fix {
   //double **array_total;
   //double ***array_list;
 
-  int column_length(int);
-  void invoke_scalar(bigint);
-  void invoke_vector(bigint);
-  void options(int, int, char **);
-  void allocate_arrays();
-  bigint nextvalid();
+  //int column_length(int);
+  //void invoke_scalar(bigint);
+  //void invoke_vector(bigint);
+  //void options(int, int, char **);
+  //void allocate_arrays();
 };
 
 }
