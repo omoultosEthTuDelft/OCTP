@@ -50,9 +50,18 @@ class FixOrderN : public Fix {
   int icompute; // the ID of compute for the tranpsort property
   int nrows;  // number of data passed to fix ordern via compute
   int startstep;  // the first timestep that it starts sampling
+  int tnb;   // total number of blocks (different time scales)
+  int tnbe;  // total number of block elements (elemets of similar timescales)
 
   bigint nvalid;        // the next(current) timestep to call end_of_step()
   bigint nvalid_last;   // the previous timestep that end_of_step() was called
+
+  double deltat;    // timeinterval (nevery*dt)
+  double time;    // correlation time
+  double boltz;   // Boltzmann constant
+  double nktv2p;  // conversion factors
+  double volume;  // volume of the simulation box
+	double coef; // conversion coefficient
 
 
   long filepos1; // the location of header lines for file 1
@@ -72,29 +81,40 @@ class FixOrderN : public Fix {
   FILE *fp2;  // output file 2 (onsager coefficients, bulk viscosity)
 
 
+  // General variables
+  int count;			// how many cycles have been passed
+
+  // ORDER-N ALGORITHM variables
+  double ***samp;		// samples of int(P^2) & int(P): 7+1
+  double ***nsamp;	// total number of samples: 7+1 
+  double ***oldint;	// The lowest bound of the integral
+  int *nbe;	// (BlockLength) nuber of active elements of blocks
+  int cnb;  // (NumberOfBlock) current active number of blocks
+  int cnbe;	//  (CurrentBlockLength) current active number of elemets of the block 
+
+
   // DIFFUSIVITY vairables
   int numgroup; // number of groups
 
   // VISCOSITY vairables
-  int samplerate;			// This is dt. Every 2dt an integration is carried out
-  double timeinterval;
-  int count, countint;			// how many cycles have been passed (count = countint*2)
-  double Pxx, Pyy, Pzz, Pxy, Pxz, Pyz;	//All stress tensor components 
-  double Pxx_s, Pyy_s, Pzz_s;		// traceless components
-  double pressure;			// The hydrostatic pressure: (Pxx+Pyy+Pzz)/3
-  double avgpressure;				// The average hydrostatic pressure
-  double sumpressure;				// The sum of hydrostatic pressure
-  double numpressure;				// The number of hydrostatic pressure
-  double tmpa[7], tmpb[7], tmpc[7];	// Temporary arrays for simpson's rule integration
-  double lastint[7];			// The last integral between t-2dt and t
-  double accint[7];			// The accumlative integral upto the newest timestep
-  double oldint[NUMBER_OF_BLOCKS][NUMBER_OF_BLOCKELEMENTS][7];	// The lowest bound of the integral
-  double integral;			// The integral we need to sample, i.e., "accint-oldint"
-  double samples[NUMBER_OF_BLOCKS][NUMBER_OF_BLOCKELEMENTS][8];		// samples of int(P^2) & int(P): 7+1
-  double samplecount[NUMBER_OF_BLOCKS][NUMBER_OF_BLOCKELEMENTS][8];	// total number of samples: 7+1 
-  int BlockLength[NUMBER_OF_BLOCKS];	// Length of each active block
-  int NumberOfBlock;			// Up to how which block, integration has been done
-  int CurrentBlockLength;		// 
+  //NO int samplerate (nfreq);			// This is dt. Every 2dt an integration is carried out
+  //NO double timeinterval (nevery);
+  //NO int countint;        // integration counting (count = 2*countint)
+  double sumP, numP, avgP;   // (avgpressure, sumpressure, numpressure) hydrostatic pressure
+  // order of data: dP_xx, dP_yy, dP_zz, P_xy, P_xz, P_yz, Phydro
+  double data[7];  // (accint[7])    accumulated integrals
+  double rint[7];   // running integral
+  double simpf0[7], simpf1[7]; // Simpson's rule of integration
+  //double Pxx, Pyy, Pzz, Pxy, Pxz, Pyz;	//All stress tensor components 
+  //double Pxx_s, Pyy_s, Pzz_s;		// traceless components
+  //NO double pressure;			// The hydrostatic pressure: (Pxx+Pyy+Pzz)/3
+  //NO double avgpressure;				// The average hydrostatic pressure
+  //NO double sumpressure;				// The sum of hydrostatic pressure
+  //NO double numpressure;				// The number of hydrostatic pressure
+  //NO double tmpa[7], tmpb[7], tmpc[7];	// Temporary arrays for simpson's rule integration
+  //NO double lastint[7];			// The last integral between t-2dt and t
+  //NO double accint[7];			// The accumlative integral upto the newest timestep
+  double dist;			// (integral) The integral we need to sample, i.e., "accint-oldint"
 
 
   // THERMCOND variables
