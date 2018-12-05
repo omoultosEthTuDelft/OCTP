@@ -52,6 +52,8 @@ class FixOrderN : public Fix {
   int startstep;  // the first timestep that it starts sampling
   int tnb;   // total number of blocks (different time scales)
   int tnbe;  // total number of block elements (elemets of similar timescales)
+  int vecsize;  // number of vector elements constructed from nrows
+  int sampsize; // number of vector elements for constructing sample arrays
 
   bigint nvalid;        // the next(current) timestep to call end_of_step()
   bigint nvalid_last;   // the previous timestep that end_of_step() was called
@@ -83,7 +85,7 @@ class FixOrderN : public Fix {
 
   // General variables
   int count;			// how many cycles have been passed
-
+  int icount;     // how many nevery, used for integration
   // ORDER-N ALGORITHM variables
   double ***samp;		// samples of int(P^2) & int(P): 7+1
   double ***nsamp;	// total number of samples: 7+1 
@@ -122,6 +124,10 @@ class FixOrderN : public Fix {
   
   // METHODS
   bigint nextvalid();
+  void integrate();
+  void write_diffusivity();
+  void write_viscosity();
+  void write_thermcond();
 
 
 

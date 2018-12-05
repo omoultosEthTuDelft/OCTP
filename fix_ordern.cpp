@@ -40,6 +40,7 @@
 #include "error.h"
 
 #include "group.h"
+#include "domain.h"
 
 
 using namespace LAMMPS_NS;
@@ -87,9 +88,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     char filen1[] = "shearviscosity.dat";
     filename1 = new char[strlen(filen1)+1];
     strcpy(filename1,filen1);   
-    char filen2[] = "bulkviscosity.dat";
-    filename2 = new char[strlen(filen2)+1];
-    strcpy(filename2,filen2);
+    filename2 = NULL;
   } else if (strcmp(arg[3],"thermalconductivity") == 0) {
     mode = THERMCOND;
     char filen1[] = "thermalconductivity.dat";
@@ -133,7 +132,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   while (iarg < narg) {
     // add more file options for mode == visocisty/diffusion/thermcond
     if (strcmp(arg[iarg],"file") == 0) {
-        if (mode == DIFFUSIVITY || mode == VISCOSITY) {
+        if (mode == DIFFUSIVITY) {
           if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
           delete [] filename1;
           filename1 = new char[strlen(arg[iarg+1])+1];
@@ -142,7 +141,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
           filename2 = new char[strlen(arg[iarg+2])+1];
           strcpy(filename2,arg[iarg+2]);
           iarg += 3;
-        } else if (mode == THERMCOND) {
+        } else if (mode == THERMCOND || mode == VISCOSITY) {
           if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
           delete [] filename1;
           filename1 = new char[strlen(arg[iarg+1])+1];
@@ -201,37 +200,39 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 
 
   // DEFINING THE PARAMETERS AND VARILABLES
-  // Order-n algorithm-specific parameters
-  memory->create(recdata,nrows,"ordern:recdata"); // data passed from compute
-  memory->create(samp,tnb,tnbe,8,"fix/ordern:samp");
-  memory->create(nsamp,tnb,tnbe,8,"fix/ordern:nsamp");
-  memory->create(oldint,tnb,tnbe,7,"fix/ordern:oldint");
-  memory->create(nbe,tnb,"fix/ordern:nbe");
 
   count = -1;   // the number of samp
   cnb = 1;
   boltz = force->boltz;
   nktv2p = force->nktv2p;
-  volume = (domain->xprd * domain->yprd * domain->zprd);
-	
-  
-  for (int i = 0; i < tnb; i++)  nbe[i]=1;
-  
+	  
   
   // Specific variables for each mode
   if (mode == DIFFUSIVITY)  {
     deltat = (double) (nevery)*(update->dt);
     numgroup = group->ngroup;            // The total # of available groups
+    vecsize = 10;   // DOUBLE CHECK
+    sampsize = 10;  // DOUBLE CHECK
 
   } else if (mode == VISCOSITY) {
-    deltat = (double) (2*nevery)*(update->dt);
-    coef = (volume/2.0/boltz)*(1.0/nktv2p);
+    deltat = (double) (2.0*nevery)*(update->dt);
+    vecsize = 7;
+    sampsize = 8;
+    
     
   } else if (mode == THERMCOND) {
-    deltat = (double) (2*nevery)*(update->dt);
-    
-
+    deltat = (double) (2.0*nevery)*(update->dt);
+    vecsize = 3;
+    sampsize = 3;
   }
+
+  // Order-n algorithm-specific parameters
+  memory->create(recdata,nrows,"fix/ordern:recdata"); // data passed from compute
+  memory->create(samp,tnb,tnbe,sampsize,"fix/ordern:samp");
+  memory->create(nsamp,tnb,tnbe,sampsize,"fix/ordern:nsamp");
+  memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
+  memory->create(nbe,tnb,"fix/ordern:nbe");
+  for (int i = 0; i < tnb; i++)  nbe[i]=1;
 
   // this fix produces a global scalar 
   // intensive/extensive flags set by compute that produces value
@@ -249,13 +250,13 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 
 // Opening new data files to output data
   if (me == 0)  {
-    if (mode == DIFFUSIVITY || mode == VISCOSITY) {
+    if (mode == DIFFUSIVITY) {
       fp1 = fopen(filename1,"w");
       fp2 = fopen(filename2,"w");
       if (fp1 == NULL || fp2 == NULL) {
         error->all(FLERR,"Cannot open fix ordern files");
       }
-    } else if (mode == THERMCOND) {
+    } else if (mode == THERMCOND || mode == VISCOSITY) {
       fp1 = fopen(filename1,"w");
       if (fp1 == NULL) {
         char str[128];
@@ -278,8 +279,8 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       fprintf(fp1,"\n");
     } else if (mode == VISCOSITY) {
       fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).\n");
-      fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\t");
-      fprintf(fp1,"eta_xy\teta_xz\teta_yz\teta_off\teta_total\n");
+      fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\teta_xy\teta_xz\teta_yz\t");
+      fprintf(fp1,"eta_off\teta_all\teta_bulk\n");
     } else if (mode == THERMCOND) {
       fprintf(fp1,"#NOTE: divide thermal conductivities by the temperature^2).\n");
       fprintf(fp1,"#Time\tlambda_x\tlambda_y\tlambda_z\tlambda_total\n");
@@ -301,10 +302,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
           fprintf(fp2,"Lambda__%s_%s\t",group->names[k],group->names[l]);
         }
       }
-      fprintf(fp1,"\n");
-    } else if (mode == VISCOSITY) {
-      fprintf(fp2,"#NOTE: divide bulk viscosities by the temperature (T).\n");
-      fprintf(fp2,"#Time\teta_b_xx\teta_b_yy\teta_b_zz\teta_b_total\n");
+      fprintf(fp2,"\n");
     }
   if (ferror(fp2)) error->one(FLERR,"Error writing file header");
   filepos2 = ftell(fp2);
@@ -343,10 +341,10 @@ FixOrderN::~FixOrderN()
 
 
   memory->destroy(recdata);
-  memory->create(samp);
-  memory->create(nsamp);
-  memory->create(oldint);
-  memory->create(nbe);
+  memory->destroy(samp);
+  memory->destroy(nsamp);
+  memory->destroy(oldint);
+  memory->destroy(nbe);
 
 
   //delete [] vector;
@@ -385,13 +383,13 @@ void FixOrderN::init()
 
   // DOUBLE CHECK: Correct initialization of all variables
   if (mode == DIFFUSIVITY)  {
-    
+    int deleteit;
     
   } else if (mode == VISCOSITY) {
     sumP = 0;
     numP = 0;
   } else if (mode == THERMCOND) {
-
+    int deleteit;
 
   }
 
@@ -430,10 +428,26 @@ void FixOrderN::end_of_step()
   {
     count = 0;
     icount = 0;
+    for (int i = 0; i<tnb; i++)
+    {
+      for (int j = 0; j < tnbe; j++)
+      {
+        for (int k = 0; k < vecsize; k++)
+        {
+          oldint[i][j][k] = 0.0;
+          samp[i][j][k] = 0.0;
+          nsamp[i][j][k] = 0.0;
+        }
+        if (mode == VISCOSITY)  {
+          samp[i][j][vecsize] = 0.0;
+          nsamp[i][j][vecsize] = 0.0;
+        }
+      }
+    }
   } else 
   {
     icount++;
-    if ((mode == VISCOSITY || mode == THERMCOND) && (icount%2 == 0))
+    if ( (mode == DIFFUSIVITY) || (icount%2 == 0) )
       count++;
   }
   
@@ -450,56 +464,43 @@ void FixOrderN::end_of_step()
   for (i = 0; i < nrows; i++)
     recdata[i] = cvector[i];
 
-  // From now-on, it should be only on the master core
+  // From now-on, it should be only on the main core
   if (me != 0)  return;
     
   // Preliminary calculations for each transport property
+  // Fill in the vector "data" accordingly
   if (mode == DIFFUSIVITY)  // DIFFUSION
   {
-    // NO NEED
-    
+    // Ad
+    int deletekon = 0;
+
   } else if (mode == VISCOSITY) // VISCOSITY
   {
     data[6] = (recdata[0]+recdata[1]+recdata[2])/3.0;
-    for (i = 1; i < 4; i++) data[i] = (recdata[i] - data[6]);
-    for (i = 4; i < 7; i++) data[i] = recdata[i];
+    for (i = 0; i < 3; i++) data[i] = (recdata[i] - data[6]);
+    for (i = 3; i < 6; i++) data[i] = recdata[i];
     sumP += data[6];
     numP += 1.0;
   } else if (mode == THERMCOND)  // THERMAL CONDUCTIVITY
   {
-    
+    for (i = 0; i < 3; i++) data[i] = recdata[i];
   }
+
   // INTEGRATION according to Simpson's rule
   if (mode == VISCOSITY || mode == THERMCOND)
   {
-    if (icount == 0) {
-      for (i = 0; i < 7; i++) 
-      {
-        rint[i] = 0.0;
-        simpf0[i] = data[i];
-      }  
-    } else if ((icount % 2) == 1) {
-      for (i = 0; i < 7; i++) 
-        simpf1[i] = data[i];
-      return;   // Not continuing till next timestep
-    } else {
-      for (i = 0; i < 7; i++) 
-      {
-        rint[i] += (nevery/3.0)*(simpf0[i]+4*simpf1[i]+data[i]);
-        simpf0[i] = data[i];
-        simpf1[i] = 0.0;
-      }
-    }
+    integrate();
+    if ((icount % 2) == 1)  return; // return for odd timesteps
   }
 
   // ORDER-N ALGORITHM
   // loop over all blocks
   i = count/(pow(tnbe,cnb));
   while (i != 0)
-    {
-      cnb++;
-      i /= tnbe;
-    }
+  {
+    cnb++;
+    i /= tnbe;
+  }
   for(i = 0; i < cnb; i++)
   {
     if ((count)%((int)pow(tnbe,i))==0)
@@ -509,98 +510,39 @@ void FixOrderN::end_of_step()
 	    {
         //if ((countint)%((j+1)*((int)pow(tnbe,i)))==0)
 	      {
-	        for (k = 0; k < 7; k++)
+	        for (k = 0; k < vecsize; k++)
           {
 	          // correction for dimensions in total, and adding kb and volume (WITHOUT TEMPERATURE)
-		        dist = accint[k]-oldint[i][j][k];
+		        dist = rint[k]-oldint[i][j][k];
 	          //samp[i][j][k] += (dist*dist)*(1.0/inv_volume/2.0/boltz)*(1.0/nktv2p);
 	          samp[i][j][k] += (dist*dist);	// ADD THE COEFFICIENT LATER
 	          nsamp[i][j][k] += 1.0;
-		        if (k == 6)
+		        if ( (mode == VISCOSITY) && (k == vecsize-1) )
 		        {
-		          samp[i][j][7] += (dist);
-	            nsamp[i][j][7] += 1.0;
+		          samp[i][j][vecsize] += (dist);
+	            nsamp[i][j][vecsize] += 1.0;
 		        }
 	        }
 	      }
 	    }
     	nbe[i]++;
-	    for (int k=0; k < 7; k++)
+	    for (int k=0; k < vecsize; k++)
 	    {
 	      for (int j=1; j < tnbe; j++)
 	        oldint[i][j-1][k] = oldint[i][j][k] ;
-	      oldint[i][tnbe-1][k] = accint[k]; 
+	      oldint[i][tnbe-1][k] = rint[k]; 
 	    }
 	  }
   }
 
-  
-
-
-
-  // OUTPUT RESULTS TO THE FILES (fp1 and fp2) IF TIME == nfreq
+  // OUTPUT RESULTS TO FILES (fp1 and fp2) IF TIME == nfreq
   if (ntimestep % nfreq)  return;
-  fseek(fp1,filepos1,SEEK_SET);
-	for (i=0; i<MIN(tnb,cnb); i++)
-	{
-	  if (i == MIN(tnb,cnb)-1)
-	    cnbe = MIN(nbe[i],tnbe)-1;
-	  else
-	    cnbe = MIN(nbe[i],tnbe);
-	  for (j = 1; j <= cnbe; j++)	// Just neglect the first data on the right (k=2)
-	  {
-	    time = ((1.0*j)*(deltat)*pow(tnbe,i));
-      fprintf(fp1,format,time);
-	    // SHEAR VISCOSITY
-	    double totalstress = 0.0;
-	    double totalshear = 0.0;
-	    for (k = 0; k< 6; k++)
-	    {
-	      stresscomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
-	      fprintf(fp1,format,stresscomp);
-	      if (k<3)
-	      { 
-          // implicit 4/3 contribution from diagonal
-	        totalstress += 1.0*1.0*stresscomp/10.0;	
-	      }
-	      else
-	      {
-	        totalstress += 2.0*1.0*stresscomp/10.0;
-	        totalshear += stresscomp/3.0;
-	      }
-	    }
-	    fprintf(fp1,format,totalshear);
-      fprintf(fp1,format,totalstress);
-	    // BULK VISCOSITY
-	    double intp2 = samp[i][tnbe-j][6]/nsamp[i][tnbe-j][6];
-	    double intp = samp[i][tnbe-j][7]/nsamp[i][tnbe-j][7];
-	    avgP = sumP / numP;
-	    double bulkvis = coef*(intp2 - 2.0*intp*(avgP*time) + (avgP*time)*(avgP*time));
-	    fprintf(fp1,format,bulkvis);
-	  }
-	}
-  fflush(fp1);
-  // delete all unnecessary text from the output file
-  long fileend1 = ftell(fp1);
-  if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
-
-  // First output file (DOUBLE CHECK)
-  /*if (fp1 && me == 0) {
-    // getting the position to the end of header
-    fseek(fp1,filepos1,SEEK_SET);
-    // write the data 
-    fprintf(fp1,BIGINT_FORMAT " %d\n",ntimestep,nrows);
-    for (i = 0; i < nrows; i++) {
-      //fprintf(fp1,"%d",i+1);
-      fprintf(fp1,format,recdata[i]);  // user-defined format
-      fprintf(fp1,"\n");
-    }
-    fflush(fp1);
-    // delete all unnecessary text from the output file
-    long fileend1 = ftell(fp1);
-    if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
-  }*/
-  // Second output file (DOUBLE CHECK)
+  if (mode == DIFFUSIVITY)
+    write_diffusivity();
+  else if (mode == VISCOSITY)
+    write_viscosity();
+  else if (mode == THERMCOND)
+    write_thermcond();
 
 }
 
@@ -617,4 +559,168 @@ bigint FixOrderN::nextvalid()
   if (startstep > nvalid) nvalid = startstep;
   if (nvalid % nevery) nvalid = (nvalid/nevery)*nevery+nevery;
   return nvalid;
+}
+
+/*-------------------------------------------------------------------------
+   Integrating Dynamical Variables According to the Simpson's Rule
+------------------------------------------------------------------------- */
+void FixOrderN::integrate()
+{
+  if (icount == 0) {
+    for (int i = 0; i < vecsize; i++) 
+    {
+      rint[i] = 0.0;
+      simpf0[i] = data[i];
+    }  
+  } else if ((icount % 2) == 1) {
+    for (int i = 0; i < vecsize; i++) 
+      simpf1[i] = data[i];
+  } else {
+    for (int i = 0; i < vecsize; i++) 
+    {
+      // delta = dt*(f0+4f1+f2)/6
+      rint[i] += deltat*(simpf0[i]+4*simpf1[i]+data[i])/6.0;
+      simpf0[i] = data[i];
+      simpf1[i] = 0.0;
+    }
+  }
+  return;
+}
+
+
+/*-------------------------------------------------------------------------
+   Writing Order-n Results for Diffusivity into a File
+------------------------------------------------------------------------- */
+void FixOrderN::write_diffusivity()
+{
+  fseek(fp1,filepos1,SEEK_SET);
+  fseek(fp2,filepos2,SEEK_SET);
+  int i, j, k;
+	double totalcond;
+  double fluxcomp;
+  double volume = (domain->xprd * domain->yprd * domain->zprd);
+  double coef = (1.0/volume/2.0/boltz);
+	for (i=0; i<MIN(tnb,cnb); i++)
+	{
+    cnbe = MIN(nbe[i],tnbe);
+	  if (i == MIN(tnb,cnb)-1)
+	    cnbe = cnbe-1;
+	  for (j = 1; j <= cnbe; j++)	// Just neglect the first data on the right (k=2)
+	  {
+	    time = (double) ((1.0*j)*(deltat)*pow(tnbe,i));
+      fprintf(fp1,format,time);
+	    totalcond = 0.0;
+	    for (k = 0; k < 3; k++)
+	    {
+	      fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
+        fprintf(fp1,format,fluxcomp);
+	      totalcond += fluxcomp/3.0;
+	    }
+	    fprintf(fp1,format,totalcond);
+      fprintf(fp1,"\n");
+	  }
+	}
+  fflush(fp1);
+  fflush(fp2);
+  // delete all unnecessary text from the output file
+  long fileend1 = ftell(fp1);
+  if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
+  long fileend2 = ftell(fp2);
+  if (fileend2 > 0) ftruncate(fileno(fp2),fileend2);
+}
+
+
+/*-------------------------------------------------------------------------
+   Writing Order-n Results for Viscosity into a File
+------------------------------------------------------------------------- */
+void FixOrderN::write_viscosity()
+{
+  fseek(fp1,filepos1,SEEK_SET);
+  int i, j, k;
+	double totalall;
+	double totaloff;
+  double stresscomp;
+  double volume = (domain->xprd * domain->yprd * domain->zprd);
+  double coef = (volume/2.0/boltz)*(1.0/nktv2p);
+	avgP = sumP / numP;
+	for (i=0; i<MIN(tnb,cnb); i++)
+	{
+    cnbe = MIN(nbe[i],tnbe);
+	  if (i == MIN(tnb,cnb)-1)
+	    cnbe = cnbe-1;
+	  for (j = 1; j <= cnbe; j++)	// Just neglect the first data on the right (k=2)
+	  {
+	    time = (double) ((1.0*j)*(deltat)*pow(tnbe,i));
+      fprintf(fp1,format,time);
+	    // SHEAR VISCOSITY
+	    totalall = 0.0;
+	    totaloff = 0.0;
+	    for (k = 0; k < 6; k++)
+	    {
+	      stresscomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
+	      if (k<3)
+	      { 
+          // implicit 4/3 contribution from diagonal
+	        fprintf(fp1,format,stresscomp*3.0/4.0);
+	        totalall += 1.0*1.0*stresscomp/10.0;	
+	      }
+	      else
+	      {
+	        fprintf(fp1,format,stresscomp);
+	        totalall += 2.0*1.0*stresscomp/10.0;
+	        totaloff += stresscomp/3.0;
+	      }
+	    }
+	    fprintf(fp1,format,totaloff);
+      fprintf(fp1,format,totalall);
+	    // BULK VISCOSITY
+	    double intp2 = samp[i][tnbe-j][vecsize-1]/nsamp[i][tnbe-j][vecsize-1];
+	    double intp = samp[i][tnbe-j][vecsize]/nsamp[i][tnbe-j][vecsize];
+	    double bulkvis = coef*(intp2 - 2.0*intp*(avgP*time) + (avgP*time)*(avgP*time));
+	    fprintf(fp1,format,bulkvis);
+      fprintf(fp1,"\n");
+	  }
+	}
+  fflush(fp1);
+  // delete all unnecessary text from the output file
+  long fileend1 = ftell(fp1);
+  if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
+}
+
+
+/*-------------------------------------------------------------------------
+   Writing Order-n Results for Thermal Conductivity into a File
+------------------------------------------------------------------------- */
+void FixOrderN::write_thermcond()
+{
+  fseek(fp1,filepos1,SEEK_SET);
+  int i, j, k;
+	double totalcond;
+  double fluxcomp;
+  double volume = (domain->xprd * domain->yprd * domain->zprd);
+  double coef = (1.0/volume/2.0/boltz);
+	for (i=0; i<MIN(tnb,cnb); i++)
+	{
+    cnbe = MIN(nbe[i],tnbe);
+	  if (i == MIN(tnb,cnb)-1)
+	    cnbe = cnbe-1;
+	  for (j = 1; j <= cnbe; j++)	// Just neglect the first data on the right (k=2)
+	  {
+	    time = (double) ((1.0*j)*(deltat)*pow(tnbe,i));
+      fprintf(fp1,format,time);
+	    totalcond = 0.0;
+	    for (k = 0; k < 3; k++)
+	    {
+	      fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
+        fprintf(fp1,format,fluxcomp);
+	      totalcond += fluxcomp/3.0;
+	    }
+	    fprintf(fp1,format,totalcond);
+      fprintf(fp1,"\n");
+	  }
+	}
+  fflush(fp1);
+  // delete all unnecessary text from the output file
+  long fileend1 = ftell(fp1);
+  if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
 }
