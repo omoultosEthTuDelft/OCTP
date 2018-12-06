@@ -102,7 +102,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   nevery = force->inumeric(FLERR,arg[4]); 
   // rate of writing files
   nfreq = force->inumeric(FLERR,arg[5]);  
-  global_freq = nfreq;  
+  global_freq = nevery;  
 
   // OBTAINING THE ID OF COMPUTE FOR THIS FIX
   // number of input values (it must be only one compute)
