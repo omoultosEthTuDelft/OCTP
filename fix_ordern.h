@@ -96,14 +96,9 @@ class FixOrderN : public Fix {
 
 
   // DIFFUSIVITY vairables
-  //int numgroup; // number of groups
-  // double ****BlockDATA;
-  //double **TmpPos;
   double ***PosC_ii;
   double ****PosC_ij;
   double ****PosCorrSum;
-  //int **Groups; 		// The group id of each atom
-  // Finding corresponding groups to each atom
   int **groupinfo;
   int **atomingroup;
   int atomgroup;  // the ID of each group
@@ -115,46 +110,21 @@ class FixOrderN : public Fix {
   int atomID; // the ID of an atom inside a group (to natom)
   int atommask; // the group mask of an atom 
 
-  // VISCOSITY vairables
-  double sumP, numP, avgP;   // (avgpressure, sumpressure, numpressure) hydrostatic pressure
+  // VISCOSITY/THERMCOND vairables
   // order of data: dP_xx, dP_yy, dP_zz, P_xy, P_xz, P_yz, Phydro
   double *data;  // accumulated integrals
+  double sumP, numP, avgP;   // (avgpressure, sumpressure, numpressure) hydrostatic pressure
   double *rint;   // running integral
   double *simpf0, *simpf1; // Simpson's rule of integration
-  double dist;			// (integral) The integral we need to sample, i.e., "accint-oldint"
-
-
-  // THERMCOND variables
+  double dist;			// (integral) The integral we need to sample, i.e., "accint-oldint"  
   
-  
-  // METHODS
+  // PRIVATE METHODS
   bigint nextvalid();
   void integrate();
   void write_diffusivity();
   void write_viscosity();
   void write_thermcond();
 
-
-
-
-  // MAYBE LATER
-
-  
-
-  //int noff,overwrite;
-  //double *vector;
-  //double *vector_total;
-  //double **vector_list;
-  //double *column;
-  //double **array;
-  //double **array_total;
-  //double ***array_list;
-
-  //int column_length(int);
-  //void invoke_scalar(bigint);
-  //void invoke_vector(bigint);
-  //void options(int, int, char **);
-  //void allocate_arrays();
 };
 
 }

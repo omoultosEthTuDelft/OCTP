@@ -81,18 +81,18 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     char filen1[] = "selfdiffusivity.dat";
     filename1 = new char[strlen(filen1)+1];
     strcpy(filename1,filen1);
-    char filen2[] = "onsagercoefficients.dat";
+    char filen2[] = "onsagercoefficient.dat";
     filename2 = new char[strlen(filen2)+1];
     strcpy(filename2,filen2);
   } else if (strcmp(arg[3],"viscosity") == 0) {
     mode = VISCOSITY;
-    char filen1[] = "shearviscosity.dat";
+    char filen1[] = "viscosity.dat";
     filename1 = new char[strlen(filen1)+1];
     strcpy(filename1,filen1);   
     filename2 = NULL;
   } else if (strcmp(arg[3],"thermalconductivity") == 0) {
     mode = THERMCOND;
-    char filen1[] = "thermalconductivity.dat";
+    char filen1[] = "thermconductivity.dat";
     filename1 = new char[strlen(filen1)+1];
     strcpy(filename1,filen1);
     filename2 = NULL;
@@ -553,83 +553,6 @@ void FixOrderN::end_of_step()
       rint[3*atomID+1] = recdata[5*sortID+1];
       rint[3*atomID+2] = recdata[5*sortID+2];
     }
-    
-    
-  
-  
-  // Calculating the elements of Dself, Cii*, and Cij 
-  
-  /*
-  // loop over all blocks
-  i = count/(pow(tnbe,cnb));
-  while (i != 0)
-  {
-    cnb++;
-    i /= tnbe;
-  }
-  if (count>=1) 
-  {
-    //loop over all the blocks to test which blocks need sampling
-    for(i = 0; i < cnb; i++)
-    {
-      if ((count)%((int)pow(tnbe,i))==0)
-      {
-        //compute the current length of the block, limited to size ’MAX_NUMBER_OF_BLOCKELEMENTS’
-        cnbe = MIN(nbe[i],tnbe);
-        //loop over the molecules in the system
-        for(j = tnbe-1;j >= tnbe - cnbe;j--)
-        { 
-          nsamp[i][j] += 1.0;
-          for(int k = 1 ; k <= ngroup ; k++ )
-          {
-            PosCorrSum[i][i][k][0] = 0;
-            PosCorrSum[i][i][k][1] = 0;
-            PosCorrSum[i][i][k][2] = 0;
-          }
-          for (realatom = 0; realatom < tnatom ; realatom++)
-          {
-            groupatom1 = Groups[realatom][0];
-            if (groupatom1 > 0)
-            {
-              PosC_ii[i][j][groupatom1] += 
-        	                       ( SQR(BlockDATA[i][realatom][j][0] - TmpPos[realatom][0])
-                                       + SQR(BlockDATA[i][realatom][j][1] - TmpPos[realatom][1])
-                                       + SQR(BlockDATA[i][realatom][j][2] - TmpPos[realatom][2]) );
-              PosCorrSum[i][j][groupatom1][0] += (BlockDATA[i][realatom][j][0] - TmpPos[realatom][0]);
-              PosCorrSum[i][j][groupatom1][1] += (BlockDATA[i][realatom][j][1] - TmpPos[realatom][1]);
-              PosCorrSum[i][j][groupatom1][2] += (BlockDATA[i][realatom][j][2] - TmpPos[realatom][2]);
-            }
-          }
-          for ( k = 1 ; k <= ngroup ; k++)
-          {
-            for ( l = 1 ; l <= ngroup ; l++)
-            {
-              PosC_ij[i][j][k][l] += 
-                 + PosCorrSum[i][j][k][0] * PosCorrSum[i][j][l][0]
-            	   + PosCorrSum[i][j][k][1] * PosCorrSum[i][j][l][1]
-            	   + PosCorrSum[i][j][k][2] * PosCorrSum[i][j][l][2];
-            }
-          }
-        }
-        //increase the current blocklength
-        nbe[i]++;
-        //shift to the left, set last index to the correlation value
-        for( realatom = 0 ; realatom < tnatom ; realatom++)
-        { 
-          for(k = 1;k < tnbe;k++)
-          {
-            BlockDATA[i][realatom][k-1][0] = BlockDATA[i][realatom][k][0];
-            BlockDATA[i][realatom][k-1][1] = BlockDATA[i][realatom][k][1];
-            BlockDATA[i][realatom][k-1][2] = BlockDATA[i][realatom][k][2];
-          }
-          BlockDATA[i][realatom][tnbe-1][0] = TmpPos[realatom][0];
-          BlockDATA[i][realatom][tnbe-1][1] = TmpPos[realatom][1];
-          BlockDATA[i][realatom][tnbe-1][2] = TmpPos[realatom][2];
-        }
-      }
-    } 
-  }     
-  */
 
 
   } else if (mode == VISCOSITY) // VISCOSITY
