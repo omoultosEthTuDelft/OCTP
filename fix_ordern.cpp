@@ -41,6 +41,7 @@
 
 #include "group.h"
 #include "domain.h"
+#include "atom.h"
 
 
 using namespace LAMMPS_NS;
@@ -210,15 +211,15 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // Specific variables for each mode
   if (mode == DIFFUSIVITY)  {
     deltat = (double) (nevery)*(update->dt);
-    numgroup = group->ngroup;            // The total # of available groups
-    vecsize = 10;   // DOUBLE CHECK
-    sampsize = 10;  // DOUBLE CHECK
-
+    //numgroup = group->ngroup;    // The total # of available groups
+    vecsize = 3*atom->natoms;   // DOUBLE CHECK
+    ngroup = 0;
   } else if (mode == VISCOSITY) {
     deltat = (double) (2.0*nevery)*(update->dt);
     vecsize = 7;
     sampsize = 8;
-    
+    sumP = 0;
+    numP = 0;
     
   } else if (mode == THERMCOND) {
     deltat = (double) (2.0*nevery)*(update->dt);
@@ -227,11 +228,30 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   }
 
   // Order-n algorithm-specific parameters
+  if ( (mode == VISCOSITY) || (mode == THERMCOND) )
+  {
+    memory->create(data,vecsize,"fix/ordern:data");
+    memory->create(simpf0,vecsize,"fix/ordern:simpf0");
+    memory->create(simpf1,vecsize,"fix/ordern:simpf1");
+    memory->create(samp,tnb,tnbe,sampsize,"fix/ordern:samp");
+  } else if ( mode == DIFFUSIVITY)
+  {
+    //memory->create(BlockDATA,tnb,atom->natoms,tnbe,3,"fix/ordern:BlockDATA");
+    memory->create(PosC_ii,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_ii");
+    memory->create(PosC_ij,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ij");
+    memory->create(PosCorrSum,tnb,tnbe,MAXGROUPS,3,"fix/ordern:PosCorrSum");
+    //memory->create(TmpPos,atom->natoms,4,"fix/ordern:TmpPos");
+    //memory->create(Groups,atom->natoms,3,"fix/ordern:Groups");
+    memory->create(atomingroup,atom->natoms,2,"fix/ordern:atomingroup");
+    memory->create(groupinfo,MAXGROUPS,2,"fix/ordern:groupinfo");
+    // int BlockLength[tnb];   (nbe)
+    // double count_samples[tnb][tnbe]; (nsamp)
+  }
   memory->create(recdata,nrows,"fix/ordern:recdata"); // data passed from compute
-  memory->create(samp,tnb,tnbe,sampsize,"fix/ordern:samp");
-  memory->create(nsamp,tnb,tnbe,sampsize,"fix/ordern:nsamp");
-  memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
+  memory->create(nsamp,tnb,tnbe,"fix/ordern:nsamp");
   memory->create(nbe,tnb,"fix/ordern:nbe");
+  memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
+  memory->create(rint,vecsize,"fix/ordern:rint");
   for (int i = 0; i < tnb; i++)  nbe[i]=1;
 
   // this fix produces a global scalar 
@@ -272,11 +292,11 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     if (mode == DIFFUSIVITY)  {
       fprintf(fp1,"#NOTE: divide self-diffusivities by the ");
       fprintf(fp1,"number of molecules of species i (N_i).\n");
-      fprintf(fp1,"#Time\t");
-      for (int k = 0; k <= numgroup; k++) {
-        fprintf(fp1,"Ds__%s\t",group->names[k]);      // DOUBLE CHECK  (tmpgroup)
-      }
-      fprintf(fp1,"\n");
+      //fprintf(fp1,"#Time\t");
+      //for (int k = 0; k <= numgroup; k++) {
+      //  fprintf(fp1,"Ds__%s\t",group->names[k]);      // DOUBLE CHECK  (groupinfo)
+      //}
+      //fprintf(fp1,"\n");
     } else if (mode == VISCOSITY) {
       fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).\n");
       fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\teta_xy\teta_xz\teta_yz\t");
@@ -295,14 +315,14 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     if (mode == DIFFUSIVITY) {
       fprintf(fp2,"#NOTE: divide Onsager coefficients ");
       fprintf(fp2,"by the total number of molecules (N).\n");
-      fprintf(fp2,"#Time\t");
-      for (int k = 0; k <= numgroup; k++) {
-        for (int l = 0; l <= k; l++) {
-          // DOUBLE CHECK (tmpgroup)
-          fprintf(fp2,"Lambda__%s_%s\t",group->names[k],group->names[l]);
-        }
-      }
-      fprintf(fp2,"\n");
+      //fprintf(fp2,"#Time\t");
+      //for (int k = 0; k <= numgroup; k++) {
+      //  for (int l = 0; l <= k; l++) {
+      //    // DOUBLE CHECK (groupinfo)
+      //    fprintf(fp2,"Lambda__%s_%s\t",group->names[k],group->names[l]);
+      //  }
+      //}
+      //fprintf(fp2,"\n");
     }
   if (ferror(fp2)) error->one(FLERR,"Error writing file header");
   filepos2 = ftell(fp2);
@@ -320,38 +340,26 @@ FixOrderN::~FixOrderN()
   if (fp1 && me == 0) fclose(fp1);
   if (fp2 && me == 0) fclose(fp2);
   // DOUBLE CHECK: DELETE All arrays here
-  if (mode == DIFFUSIVITY)  {
-    int define_arrays = 0;
-  } else if (mode == VISCOSITY) {
-    int define_arrays = 0;
-  } else if (mode == THERMCOND) {
-    int define_arrays = 0;
+  if ( (mode == VISCOSITY) || (mode == THERMCOND) )
+  {
+    memory->destroy(data);
+    memory->destroy(simpf0);
+    memory->destroy(simpf1);
+    memory->destroy(samp);
+  } else if ( mode == DIFFUSIVITY)
+  {
+    memory->destroy(PosC_ii);
+    memory->destroy(PosC_ij);
+    memory->destroy(PosCorrSum);
+    memory->destroy(atomingroup);
+    memory->destroy(groupinfo);
   }
-
-
-  //delete [] which;
-  //delete [] argindex;
-  //delete [] value2index;
-  //delete [] offcol;
-  //delete [] varlen;
-  //for (int i = 0; i < nvalues; i++) delete [] ids[i];
-  //delete [] ids;
-
-  //delete [] extlist;
-
-
   memory->destroy(recdata);
-  memory->destroy(samp);
   memory->destroy(nsamp);
   memory->destroy(oldint);
+  memory->destroy(rint);
   memory->destroy(nbe);
-
-
-  //delete [] vector;
-  //delete [] vector_total;
-  //memory->destroy(array);
-  //memory->destroy(array_total);
-  //memory->destroy(array_list);
+  
 }
 
 /* ----------------------------------------------------------------------
@@ -380,21 +388,6 @@ void FixOrderN::init()
     nvalid = nextvalid();
     modify->addstep_compute_all(nvalid);
   }
-
-  // DOUBLE CHECK: Correct initialization of all variables
-  if (mode == DIFFUSIVITY)  {
-    int deleteit;
-    
-  } else if (mode == VISCOSITY) {
-    sumP = 0;
-    numP = 0;
-  } else if (mode == THERMCOND) {
-    int deleteit;
-
-  }
-
-
-
 }
 
 /* ----------------------------------------------------------------------
@@ -423,33 +416,6 @@ void FixOrderN::end_of_step()
   modify->addstep_compute(nvalid);
 
   int i,j,k,l;
-  // DOUBLE CHECK: HOW TO DEFINE first timestep
-  if (count < 0)  
-  {
-    count = 0;
-    icount = 0;
-    for (int i = 0; i<tnb; i++)
-    {
-      for (int j = 0; j < tnbe; j++)
-      {
-        for (int k = 0; k < vecsize; k++)
-        {
-          oldint[i][j][k] = 0.0;
-          samp[i][j][k] = 0.0;
-          nsamp[i][j][k] = 0.0;
-        }
-        if (mode == VISCOSITY)  {
-          samp[i][j][vecsize] = 0.0;
-          nsamp[i][j][vecsize] = 0.0;
-        }
-      }
-    }
-  } else 
-  {
-    icount++;
-    if ( (mode == DIFFUSIVITY) || (icount%2 == 0) )
-      count++;
-  }
   
   // invoke compute vector if not previously invoked
   // get the data from compute_vector and store it in recdata
@@ -464,18 +430,221 @@ void FixOrderN::end_of_step()
   for (i = 0; i < nrows; i++)
     recdata[i] = cvector[i];
 
-  // From now-on, it should be only on the main core
+  // From now, everything is computed only on the main core
   if (me != 0)  return;
-    
+
+  // DOUBLE CHECK: HOW TO DEFINE first timestep
+  if (count < 0)  
+  {
+    count = 0;
+    icount = 0;
+  } else {
+    icount++;
+    if ( (mode == DIFFUSIVITY) || (icount%2 == 0) )
+      count++;
+  }
+
+
+
+
+
+
+
   // Preliminary calculations for each transport property
   // Fill in the vector "data" accordingly
   if (mode == DIFFUSIVITY)  // DIFFUSION
   {
-    // Ad
-    int deletekon = 0;
+    //int numgroup = group->ngroup; // The total # of available groups
+    tnatom = atom->natoms;
+    if (count == 0)   // only run during the first time step
+    { 
+      natom = 0;
+      // Finding corresponding groups to each atom at the first time
+      for (sortID = 0; sortID < tnatom; sortID++)
+      {
+        ID = (int) (recdata[5*sortID+3]+0.1);
+        atommask = (int) recdata[5*sortID+4]+0.1;
+        int groupfound = 0;
+        // DOUBLE CHECK: ERROR IF AN ATOM BELONG TO TWO GROUPS
+        if (ngroup > 0 ) // First try to match with available groups
+        {
+      	  for (j = 1; j <= ngroup; j++)
+          {
+            if ( atommask  & groupinfo[j][1] )
+            {
+              atomingroup[ID][0] = natom;  // ID starts from 0
+              atomingroup[ID][1] = j;  // groupID starts from 1
+              natom++;
+              groupfound = 1;
+              break;
+            }
+          }
+        }
+        if (groupfound == 0) // If no match, try to find a new group
+        {
+          for (k = 1 ; k < MAXGROUPS; k++)
+          {
+            if ( atommask & group->bitmask[k] )
+            {
+              ngroup++;
+              groupinfo[ngroup][0] = k;
+              groupinfo[ngroup][1] = group->bitmask[k];
+              atomingroup[ID][0] = natom;  // ID starts from 0
+              atomingroup[ID][1] = ngroup;  // groupID starts from 1
+              natom++;
+              groupfound = 1;
+              break; 
+            }
+          }
+        }
+        // if this atom doesn't belong to any group
+        if (groupfound == 0)
+          atomingroup[ID][0] = atomingroup[ID][1] = -1;
+      }
+
+      // error start
+      //char str[128];
+      //snprintf(str,128,"Cannot open fix ordern file %d %d",ngroup,natom);
+      //error->one(FLERR,str);
+      // error finish
+
+
+      // redefine the arrays for storing the positions
+      memory->destroy(oldint);
+      memory->create(oldint,tnb,tnbe,3*natom,"fix/ordern:oldint");
+      memory->destroy(rint);
+      memory->create(rint,3*natom,"fix/ordern:rint");
+      // initializing the arrays
+      for(sortID = 0; sortID < tnatom ; sortID++)
+      {
+        ID = (int) (recdata[5*sortID+3]+0.1);
+        if (atomingroup[ID][0] < 0)
+          continue;
+        atomID = atomingroup[ID][0];
+        for( i = 0; i < tnb; i++)
+        {
+          oldint[i][tnbe-1][3*atomID] = recdata[5*sortID];
+          oldint[i][tnbe-1][3*atomID+1] = recdata[5*sortID+1];
+          oldint[i][tnbe-1][3*atomID+2] = recdata[5*sortID+2];
+          for ( j = 0; j < tnbe; j++)
+          {
+            nsamp[i][j] = 0.0;
+            for ( k = 0; k < MAXGROUPS; k++)
+            {  
+              PosC_ii[i][j][k] =0.0;
+              for ( l = 0; l < MAXGROUPS ; l++)
+              {
+                PosC_ij[i][j][k][l] = 0.0;
+              }
+            }
+          }
+        } 
+      }
+    }
+    if (count == 0) return; // nothing to do at this timestep
+
+    for(sortID = 0; sortID < tnatom ; sortID++)
+    {
+      ID = (int) (recdata[5*sortID+3]+0.1);
+      if (atomingroup[ID][0] < 0)
+        continue;
+      atomID = atomingroup[ID][0];
+      rint[3*atomID] = recdata[5*sortID];
+      rint[3*atomID+1] = recdata[5*sortID+1];
+      rint[3*atomID+2] = recdata[5*sortID+2];
+    }
+    
+    
+  
+  
+  // Calculating the elements of Dself, Cii*, and Cij 
+  
+  /*
+  // loop over all blocks
+  i = count/(pow(tnbe,cnb));
+  while (i != 0)
+  {
+    cnb++;
+    i /= tnbe;
+  }
+  if (count>=1) 
+  {
+    //loop over all the blocks to test which blocks need sampling
+    for(i = 0; i < cnb; i++)
+    {
+      if ((count)%((int)pow(tnbe,i))==0)
+      {
+        //compute the current length of the block, limited to size ’MAX_NUMBER_OF_BLOCKELEMENTS’
+        cnbe = MIN(nbe[i],tnbe);
+        //loop over the molecules in the system
+        for(j = tnbe-1;j >= tnbe - cnbe;j--)
+        { 
+          nsamp[i][j] += 1.0;
+          for(int k = 1 ; k <= ngroup ; k++ )
+          {
+            PosCorrSum[i][i][k][0] = 0;
+            PosCorrSum[i][i][k][1] = 0;
+            PosCorrSum[i][i][k][2] = 0;
+          }
+          for (realatom = 0; realatom < tnatom ; realatom++)
+          {
+            groupatom1 = Groups[realatom][0];
+            if (groupatom1 > 0)
+            {
+              PosC_ii[i][j][groupatom1] += 
+        	                       ( SQR(BlockDATA[i][realatom][j][0] - TmpPos[realatom][0])
+                                       + SQR(BlockDATA[i][realatom][j][1] - TmpPos[realatom][1])
+                                       + SQR(BlockDATA[i][realatom][j][2] - TmpPos[realatom][2]) );
+              PosCorrSum[i][j][groupatom1][0] += (BlockDATA[i][realatom][j][0] - TmpPos[realatom][0]);
+              PosCorrSum[i][j][groupatom1][1] += (BlockDATA[i][realatom][j][1] - TmpPos[realatom][1]);
+              PosCorrSum[i][j][groupatom1][2] += (BlockDATA[i][realatom][j][2] - TmpPos[realatom][2]);
+            }
+          }
+          for ( k = 1 ; k <= ngroup ; k++)
+          {
+            for ( l = 1 ; l <= ngroup ; l++)
+            {
+              PosC_ij[i][j][k][l] += 
+                 + PosCorrSum[i][j][k][0] * PosCorrSum[i][j][l][0]
+            	   + PosCorrSum[i][j][k][1] * PosCorrSum[i][j][l][1]
+            	   + PosCorrSum[i][j][k][2] * PosCorrSum[i][j][l][2];
+            }
+          }
+        }
+        //increase the current blocklength
+        nbe[i]++;
+        //shift to the left, set last index to the correlation value
+        for( realatom = 0 ; realatom < tnatom ; realatom++)
+        { 
+          for(k = 1;k < tnbe;k++)
+          {
+            BlockDATA[i][realatom][k-1][0] = BlockDATA[i][realatom][k][0];
+            BlockDATA[i][realatom][k-1][1] = BlockDATA[i][realatom][k][1];
+            BlockDATA[i][realatom][k-1][2] = BlockDATA[i][realatom][k][2];
+          }
+          BlockDATA[i][realatom][tnbe-1][0] = TmpPos[realatom][0];
+          BlockDATA[i][realatom][tnbe-1][1] = TmpPos[realatom][1];
+          BlockDATA[i][realatom][tnbe-1][2] = TmpPos[realatom][2];
+        }
+      }
+    } 
+  }     
+  */
+
 
   } else if (mode == VISCOSITY) // VISCOSITY
   {
+    if (count == 0) {
+      for ( i = 0; i<tnb; i++ )
+        for ( j = 0; j < tnbe; j++ )  {
+          nsamp[i][j] = 0.0;        
+          for (int k = 0; k < vecsize; k++) {
+            oldint[i][j][k] = 0.0;
+            samp[i][j][k] = 0.0;
+          }
+          samp[i][j][vecsize] = 0.0;
+        }
+    }
     data[6] = (recdata[0]+recdata[1]+recdata[2])/3.0;
     for (i = 0; i < 3; i++) data[i] = (recdata[i] - data[6]);
     for (i = 3; i < 6; i++) data[i] = recdata[i];
@@ -483,6 +652,16 @@ void FixOrderN::end_of_step()
     numP += 1.0;
   } else if (mode == THERMCOND)  // THERMAL CONDUCTIVITY
   {
+    if (count == 0) {
+      for ( i = 0; i<tnb; i++ )
+        for ( j = 0; j < tnbe; j++ )  {
+          nsamp[i][j] = 0.0;        
+          for (int k = 0; k < vecsize; k++) {
+            oldint[i][j][k] = 0.0;
+            samp[i][j][k] = 0.0;
+          }
+        }
+    }
     for (i = 0; i < 3; i++) data[i] = recdata[i];
   }
 
@@ -508,30 +687,83 @@ void FixOrderN::end_of_step()
 	    cnbe = MIN(nbe[i],tnbe);
 	    for (j=tnbe-1; j>=tnbe-cnbe; j--)
 	    {
-        //if ((countint)%((j+1)*((int)pow(tnbe,i)))==0)
+        nsamp[i][j] += 1.0;
+        if ( (mode == VISCOSITY) || (mode == THERMCOND) )
 	      {
-	        for (k = 0; k < vecsize; k++)
+	        for ( k = 0; k < vecsize; k++)
           {
 	          // correction for dimensions in total, and adding kb and volume (WITHOUT TEMPERATURE)
 		        dist = rint[k]-oldint[i][j][k];
 	          //samp[i][j][k] += (dist*dist)*(1.0/inv_volume/2.0/boltz)*(1.0/nktv2p);
 	          samp[i][j][k] += (dist*dist);	// ADD THE COEFFICIENT LATER
-	          nsamp[i][j][k] += 1.0;
 		        if ( (mode == VISCOSITY) && (k == vecsize-1) )
 		        {
 		          samp[i][j][vecsize] += (dist);
-	            nsamp[i][j][vecsize] += 1.0;
 		        }
-	        }
-	      }
+	        } 
+        } else if (mode == DIFFUSIVITY)
+        {
+          for( k = 1 ; k <= ngroup ; k++ )
+          {
+            PosCorrSum[i][j][k][0] = 0;
+            PosCorrSum[i][j][k][1] = 0;
+            PosCorrSum[i][j][k][2] = 0;
+          }
+          for (ID = 0; ID < tnatom ; ID++)
+          {
+            if (atomingroup[ID][0] < 0)
+              continue;
+            atomID = atomingroup[ID][0];
+            atomgroup = atomingroup[ID][1];
+            PosC_ii[i][j][atomgroup] += 
+                ( SQR(oldint[i][j][3*atomID] - rint[3*atomID])
+                + SQR(oldint[i][j][3*atomID+1] - rint[3*atomID+1])
+                + SQR(oldint[i][j][3*atomID+2] - rint[3*atomID+2]) );
+            PosCorrSum[i][j][atomgroup][0] += (oldint[i][j][3*atomID] - rint[3*atomID]);
+            PosCorrSum[i][j][atomgroup][1] += (oldint[i][j][3*atomID+1] - rint[3*atomID+1]);
+            PosCorrSum[i][j][atomgroup][2] += (oldint[i][j][3*atomID+2] - rint[3*atomID+2]);
+          }
+          for ( k = 1 ; k <= ngroup ; k++)
+          {
+            for ( l = 1 ; l <= ngroup ; l++)
+            {
+              PosC_ij[i][j][k][l] += 
+               + PosCorrSum[i][j][k][0] * PosCorrSum[i][j][l][0]
+          	   + PosCorrSum[i][j][k][1] * PosCorrSum[i][j][l][1]
+          	   + PosCorrSum[i][j][k][2] * PosCorrSum[i][j][l][2];
+            }
+          }
+        }
 	    }
+      //increase the current blocklength
     	nbe[i]++;
-	    for (int k=0; k < vecsize; k++)
-	    {
-	      for (int j=1; j < tnbe; j++)
-	        oldint[i][j-1][k] = oldint[i][j][k] ;
-	      oldint[i][tnbe-1][k] = rint[k]; 
-	    }
+      //shift to the left, set last index to the correlation value
+      if ( (mode == VISCOSITY) || (mode == THERMCOND) )
+      {
+	      for (int k=0; k < vecsize; k++)
+	      {
+	        for (int j=1; j < tnbe; j++)
+	          oldint[i][j-1][k] = oldint[i][j][k] ;
+	        oldint[i][tnbe-1][k] = rint[k]; 
+	      }
+      } else if (mode == DIFFUSIVITY)
+      {
+        for (ID = 0; ID < tnatom ; ID++)
+        {
+          if (atomingroup[ID][0] < 0)
+            continue;
+          atomID = atomingroup[ID][0];
+          for(j = 1 ; j < tnbe ; j++)
+          {
+            oldint[i][j-1][3*atomID] = oldint[i][j][3*atomID];
+            oldint[i][j-1][3*atomID+1] = oldint[i][j][3*atomID+1];
+            oldint[i][j-1][3*atomID+2] = oldint[i][j][3*atomID+2];
+          }
+          oldint[i][tnbe-1][3*atomID] = rint[3*atomID];
+          oldint[i][tnbe-1][3*atomID+1] = rint[3*atomID+1];
+          oldint[i][tnbe-1][3*atomID+2] = rint[3*atomID+2];
+        }
+      }
 	  }
   }
 
@@ -595,31 +827,43 @@ void FixOrderN::write_diffusivity()
 {
   fseek(fp1,filepos1,SEEK_SET);
   fseek(fp2,filepos2,SEEK_SET);
-  int i, j, k;
-	double totalcond;
-  double fluxcomp;
-  double volume = (domain->xprd * domain->yprd * domain->zprd);
-  double coef = (1.0/volume/2.0/boltz);
-	for (i=0; i<MIN(tnb,cnb); i++)
-	{
+  int i, j, k, l;
+  // Writing the header
+  fprintf(fp1,"#Time\t");
+  fprintf(fp2,"#Time\t");
+  for ( k = 1; k <= ngroup; k++)
+  {
+    fprintf(fp1,"Ds__%s\t",group->names[groupinfo[k][0]]);
+    for ( l = k; l <= ngroup; l++)
+    {
+      fprintf(fp2,"C__%s_%s\t",group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
+    }
+  }
+  fprintf(fp1,"\n");
+  fprintf(fp2,"\n");
+  
+  for( i = 0;i < MIN(tnb,cnb); i++ )
+  {
     cnbe = MIN(nbe[i],tnbe);
 	  if (i == MIN(tnb,cnb)-1)
 	    cnbe = cnbe-1;
-	  for (j = 1; j <= cnbe; j++)	// Just neglect the first data on the right (k=2)
-	  {
+    for( j = 1; j <= cnbe; j++ )
+    {
 	    time = (double) ((1.0*j)*(deltat)*pow(tnbe,i));
       fprintf(fp1,format,time);
-	    totalcond = 0.0;
-	    for (k = 0; k < 3; k++)
-	    {
-	      fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
-        fprintf(fp1,format,fluxcomp);
-	      totalcond += fluxcomp/3.0;
-	    }
-	    fprintf(fp1,format,totalcond);
+      fprintf(fp2,format,time);
+      for( k = 1; k <= ngroup; k++ )
+      {
+        fprintf(fp1,format,PosC_ii[i][tnbe-j][k]/nsamp[i][tnbe-j]);
+        for( l = k; l <= ngroup; l++ )
+        {
+          fprintf(fp2,format,PosC_ij[i][tnbe-j][k][l]/nsamp[i][tnbe-j]); 
+        }
+      }
       fprintf(fp1,"\n");
-	  }
-	}
+      fprintf(fp2,"\n");
+    }
+  }
   fflush(fp1);
   fflush(fp2);
   // delete all unnecessary text from the output file
@@ -627,6 +871,7 @@ void FixOrderN::write_diffusivity()
   if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
   long fileend2 = ftell(fp2);
   if (fileend2 > 0) ftruncate(fileno(fp2),fileend2);
+  
 }
 
 
@@ -657,7 +902,7 @@ void FixOrderN::write_viscosity()
 	    totaloff = 0.0;
 	    for (k = 0; k < 6; k++)
 	    {
-	      stresscomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
+	      stresscomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j];
 	      if (k<3)
 	      { 
           // implicit 4/3 contribution from diagonal
@@ -674,8 +919,8 @@ void FixOrderN::write_viscosity()
 	    fprintf(fp1,format,totaloff);
       fprintf(fp1,format,totalall);
 	    // BULK VISCOSITY
-	    double intp2 = samp[i][tnbe-j][vecsize-1]/nsamp[i][tnbe-j][vecsize-1];
-	    double intp = samp[i][tnbe-j][vecsize]/nsamp[i][tnbe-j][vecsize];
+	    double intp2 = samp[i][tnbe-j][vecsize-1]/nsamp[i][tnbe-j];
+	    double intp = samp[i][tnbe-j][vecsize]/nsamp[i][tnbe-j];
 	    double bulkvis = coef*(intp2 - 2.0*intp*(avgP*time) + (avgP*time)*(avgP*time));
 	    fprintf(fp1,format,bulkvis);
       fprintf(fp1,"\n");
@@ -711,7 +956,7 @@ void FixOrderN::write_thermcond()
 	    totalcond = 0.0;
 	    for (k = 0; k < 3; k++)
 	    {
-	      fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j][k];
+	      fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j];
         fprintf(fp1,format,fluxcomp);
 	      totalcond += fluxcomp/3.0;
 	    }

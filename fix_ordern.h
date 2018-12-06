@@ -34,8 +34,8 @@ class FixOrderN : public Fix {
   void setup(int);
   void end_of_step();
 
-  #define NUMBER_OF_BLOCKS		10
-  #define NUMBER_OF_BLOCKELEMENTS	10
+  #define MAXGROUPS 32
+  #define SQR(x) ((x)*(x))
 
   //void write_restart(FILE *);
   //void restart(char *);
@@ -88,7 +88,7 @@ class FixOrderN : public Fix {
   int icount;     // how many nevery, used for integration
   // ORDER-N ALGORITHM variables
   double ***samp;		// samples of int(P^2) & int(P): 7+1
-  double ***nsamp;	// total number of samples: 7+1 
+  double **nsamp;	// total number of samples
   double ***oldint;	// The lowest bound of the integral
   int *nbe;	// (BlockLength) nuber of active elements of blocks
   int cnb;  // (NumberOfBlock) current active number of blocks
@@ -96,26 +96,31 @@ class FixOrderN : public Fix {
 
 
   // DIFFUSIVITY vairables
-  int numgroup; // number of groups
+  //int numgroup; // number of groups
+  // double ****BlockDATA;
+  //double **TmpPos;
+  double ***PosC_ii;
+  double ****PosC_ij;
+  double ****PosCorrSum;
+  //int **Groups; 		// The group id of each atom
+  // Finding corresponding groups to each atom
+  int **groupinfo;
+  int **atomingroup;
+  int atomgroup;  // the ID of each group
+  int ngroup ;  // total # of groups
+  int tnatom;  // total # of atoms in system
+  int natom;    // total # of atoms in groups
+  int sortID;   // A virtual ID of the atom in a for loop (to tnatom)
+  int ID;   // the real ID of an atom on all cores (to tnatom)
+  int atomID; // the ID of an atom inside a group (to natom)
+  int atommask; // the group mask of an atom 
 
   // VISCOSITY vairables
-  //NO int samplerate (nfreq);			// This is dt. Every 2dt an integration is carried out
-  //NO double timeinterval (nevery);
-  //NO int countint;        // integration counting (count = 2*countint)
   double sumP, numP, avgP;   // (avgpressure, sumpressure, numpressure) hydrostatic pressure
   // order of data: dP_xx, dP_yy, dP_zz, P_xy, P_xz, P_yz, Phydro
-  double data[7];  // (accint[7])    accumulated integrals
-  double rint[7];   // running integral
-  double simpf0[7], simpf1[7]; // Simpson's rule of integration
-  //double Pxx, Pyy, Pzz, Pxy, Pxz, Pyz;	//All stress tensor components 
-  //double Pxx_s, Pyy_s, Pzz_s;		// traceless components
-  //NO double pressure;			// The hydrostatic pressure: (Pxx+Pyy+Pzz)/3
-  //NO double avgpressure;				// The average hydrostatic pressure
-  //NO double sumpressure;				// The sum of hydrostatic pressure
-  //NO double numpressure;				// The number of hydrostatic pressure
-  //NO double tmpa[7], tmpb[7], tmpc[7];	// Temporary arrays for simpson's rule integration
-  //NO double lastint[7];			// The last integral between t-2dt and t
-  //NO double accint[7];			// The accumlative integral upto the newest timestep
+  double *data;  // accumulated integrals
+  double *rint;   // running integral
+  double *simpf0, *simpf1; // Simpson's rule of integration
   double dist;			// (integral) The integral we need to sample, i.e., "accint-oldint"
 
 
