@@ -33,6 +33,7 @@ class FixOrderN : public Fix {
   void init();  // initialization
   void setup(int);
   void end_of_step();
+  void invoke_scalar(bigint);
 
   #define MAXGROUPS 32
   #define SQR(x) ((x)*(x))

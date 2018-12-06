@@ -64,6 +64,10 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   MPI_Comm_rank(world,&me);
 
   // Initial values
+  //eflag = 2;
+  //vflag = 5;
+  //thermo_energy = 1;
+  //peatom_flag = 1;
   startstep = 0;
   tnb = 10;
   tnbe = 10;
@@ -258,7 +262,8 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // intensive/extensive flags set by compute that produces value
   // This fix produces only a SCALAR value that I don't know yet (DOUBLE CHECK)
   scalar_flag = 1;
-  extscalar = compute->extscalar;
+  vector_flag = 0;
+  extscalar = 0;
 
   // nvalid = next step on which end_of_step does something
   // add nvalid to all computes that store invocation times
@@ -407,15 +412,21 @@ void FixOrderN::end_of_step()
   // error check if timestep was reset in an invalid manner
   bigint ntimestep = update->ntimestep;
   if (ntimestep < nvalid_last || ntimestep > nvalid)
-    error->all(FLERR,"Invalid timestep reset for fix ave/time");
+    error->all(FLERR,"Invalid timestep reset for fix order");
   if (ntimestep != nvalid) return;
-  
-  // update the next timestep to call end_of_step()
   nvalid_last = nvalid;
-  nvalid += nevery;
-  modify->addstep_compute(nvalid);
+  invoke_scalar(ntimestep);
+}
 
+void FixOrderN::invoke_scalar(bigint ntimestep)
+{
+  
   int i,j,k,l;
+  double scalar = ntimestep;
+  // update the next timestep to call end_of_step()
+  modify->addstep_compute(ntimestep+nevery);
+
+
   
   // invoke compute vector if not previously invoked
   // get the data from compute_vector and store it in recdata
@@ -429,9 +440,10 @@ void FixOrderN::end_of_step()
   double *cvector = compute->vector;
   for (i = 0; i < nrows; i++)
     recdata[i] = cvector[i];
-
-  // From now, everything is computed only on the main core
-  if (me != 0)  return;
+    
+  // update the next timestep to call end_of_step()
+  nvalid += nevery;
+  modify->addstep_compute(nvalid);
 
   // DOUBLE CHECK: HOW TO DEFINE first timestep
   if (count < 0)  
@@ -445,6 +457,8 @@ void FixOrderN::end_of_step()
   }
 
 
+  // From now, everything is computed only on the main core
+  if (me != 0)  return;
 
 
 
@@ -698,8 +712,8 @@ void FixOrderN::end_of_step()
     write_viscosity();
   else if (mode == THERMCOND)
     write_thermcond();
-
 }
+
 
 
 /* ----------------------------------------------------------------------
