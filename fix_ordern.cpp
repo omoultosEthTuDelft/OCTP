@@ -89,7 +89,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     strcpy(filename1,filen1);
     filename2 = NULL;
   } else 
-    error->all(FLERR,"Illegal fix ordern command with no transport property");
+    error->all(FLERR,"Illegal fix ordern command");
   // rate of sampling (end_of_step())
   nevery = force->inumeric(FLERR,arg[4]); 
   // rate of writing files
@@ -106,12 +106,12 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       iarg++;
     } else break;
   }
-  if (nvalues == 0) error->all(FLERR,"No values in fix ordern command");
-  if (nvalues > 1) error->all(FLERR,"More than 1 value in fix ordern command");
+  if (nvalues == 0) error->all(FLERR,"Incorrect number of inputs for fix ordern command");
+  if (nvalues > 1) error->all(FLERR,"Incorrect number of inputs for fix ordern command");
   char *suffix = new char[strlen(arg[6])];
   strcpy(suffix,&arg[6][2]);
   char *ptr = strchr(suffix,'[');
-  if (ptr) error->all(FLERR,"fix ordern requires all components of the compute");
+  if (ptr) error->all(FLERR,"All components of the vector are required for fix ordern command");
   idcompute = new char[strlen(suffix) + 1];
   strcpy(idcompute,suffix);
   delete [] suffix;
@@ -183,17 +183,17 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // for fix inputs, check that fix frequency is acceptable
   // set variable_length if any compute is variable length
   if (nevery <= 0 || nfreq <= 0 || startstep < 0)
-    error->all(FLERR,"Illegal fix ordern command: illegal number");
-  if (nfreq % (2*nevery) )  // in case of integration that it cannot write
+    error->all(FLERR,"Illegal fix ordern command: illegal numbers for fix ordern command");
+  if ( (nfreq % (2*nevery)) && ( (mode == VISCOSITY) || (mode == THERMCOND) ) )
     error->all(FLERR,"Illegal fix ordern command: nevery is not a factor of nfreq");
   if (startstep % (nevery) )
     error->all(FLERR,"Illegal fix ordern command: nevery is not a factor of start");
   if (icompute < 0)
-    error->all(FLERR,"Compute ID for fix ordern does not exist");
+    error->all(FLERR,"No compute ID for fix ordern command");
   if (modify->compute[icompute]->vector_flag == 0)
-    error->all(FLERR,"Fix ordern compute does not calculate a vector");
+    error->all(FLERR,"No global compute vector is computed for fix ordern command");
   if (modify->compute[icompute]->size_vector_variable)
-    error->all(FLERR,"The size of the vector should be kept fixed");
+    error->all(FLERR,"Input vector for fix ordern command has variable size");
 
   // DEFINING THE PARAMETERS AND VARILABLES
   count = -1;   // the number of samp
@@ -273,9 +273,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     } else if (mode == THERMCOND || mode == VISCOSITY) {
       fp1 = fopen(filename1,"w");
       if (fp1 == NULL) {
-        char str[128];
-        snprintf(str,128,"Cannot open fix ordern file %s",filename1);
-        error->one(FLERR,str);
+        error->all(FLERR,"Cannot open fix ordern files");
       }
     }
   }
@@ -285,17 +283,17 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     clearerr(fp1);
     if (title) fprintf(fp1,"%s\n",title);
     if (mode == DIFFUSIVITY)  {
-      fprintf(fp1,"#NOTE: divide self-diffusivities by the ");
+      fprintf(fp1,"#NOTE: divide MSDs by the ");
       fprintf(fp1,"number of molecules of species i (N_i).\n");
     } else if (mode == VISCOSITY) {
-      fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).\n");
-      fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\teta_xy\teta_xz\teta_yz\t");
-      fprintf(fp1,"eta_off\teta_all\teta_bulk\n");
+      fprintf(fp1,"#NOTE: divide MSDs by the temperature (T).\n");
+      fprintf(fp1,"#Time\tMSD_xx\tMSD_yy\tMSD_zz\tMSD_xy\tMSD_xz\tMSD_yz\t");
+      fprintf(fp1,"MSD_off\teta_all\tMSD_bulkvisc\n");
     } else if (mode == THERMCOND) {
-      fprintf(fp1,"#NOTE: divide thermal conductivities by the temperature^2).\n");
-      fprintf(fp1,"#Time\tlambda_x\tlambda_y\tlambda_z\tlambda_total\n");
+      fprintf(fp1,"#NOTE: divide MSDs by the temperature^2).\n");
+      fprintf(fp1,"#Time\tMSD_x\tMSD_y\tMSD_z\tMSD_all\n");
     }
-    if (ferror(fp1)) error->one(FLERR,"Error writing file header");
+    if (ferror(fp1)) error->one(FLERR,"Error in writing file header for fix ordern command");
     filepos1 = ftell(fp1);
   }
   if (fp2 && me == 0)  {
@@ -305,7 +303,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       fprintf(fp2,"#NOTE: divide Onsager coefficients ");
       fprintf(fp2,"by the total number of molecules (N).\n");
     }
-  if (ferror(fp2)) error->one(FLERR,"Error writing file header");
+  if (ferror(fp2)) error->one(FLERR,"Error in writing file header for fix ordern command");
   filepos2 = ftell(fp2);
   }
   delete [] title;
@@ -316,8 +314,16 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 FixOrderN::~FixOrderN()
 {
   delete [] format_user;
-  if (fp1 && me == 0) fclose(fp1);
-  if (fp2 && me == 0) fclose(fp2);
+  if (fp1 && me == 0) 
+  {
+    fclose(fp1);
+    delete [] filename1;
+  }
+  if (fp2 && me == 0)  
+  {
+    fclose(fp2);
+    delete [] filename2;
+  }
   if ( (mode == VISCOSITY) || (mode == THERMCOND) )
   {
     memory->destroy(data);
@@ -365,7 +371,7 @@ void FixOrderN::init()
   // set current indices for all computes,fixes,variables
   int icompute_new = modify->find_compute(idcompute);
   if (icompute < 0 || icompute_new != icompute)
-    error->all(FLERR,"Compute ID for fix ordern does not exist");    
+    error->all(FLERR,"No compute ID for fix ordern command");    
   // need to reset nvalid if nvalid < ntimestep b/c minimize was performed
   if (nvalid < update->ntimestep) {
     nvalid = nextvalid();
@@ -744,23 +750,23 @@ void FixOrderN::write_diffusivity()
   {
     if (flag_Dxyz)
     {
-      fprintf(fp1,"Ds__%s_x\t",group->names[groupinfo[k][0]]);
-      fprintf(fp1,"Ds__%s_y\t",group->names[groupinfo[k][0]]);
-      fprintf(fp1,"Ds__%s_z\t",group->names[groupinfo[k][0]]);
+      fprintf(fp1,"MSD__%s_x\t",group->names[groupinfo[k][0]]);
+      fprintf(fp1,"MSD__%s_y\t",group->names[groupinfo[k][0]]);
+      fprintf(fp1,"MSD__%s_z\t",group->names[groupinfo[k][0]]);
     }
-    fprintf(fp1,"Ds__%s\t",group->names[groupinfo[k][0]]);
+    fprintf(fp1,"MSD__%s\t",group->names[groupinfo[k][0]]);
     for ( l = k; l <= ngroup; l++)
     {
       if (flag_Dxyz)
       {
-        fprintf(fp2,"C__%s_%s_x\t",
+        fprintf(fp2,"MSD__%s_%s_x\t",
           group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
-        fprintf(fp2,"C__%s_%s_y\t",
+        fprintf(fp2,"MSD__%s_%s_y\t",
           group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
-        fprintf(fp2,"C__%s_%s_z\t",
+        fprintf(fp2,"MSD__%s_%s_z\t",
           group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
       }
-      fprintf(fp2,"C__%s_%s\t",
+      fprintf(fp2,"MSD__%s_%s\t",
         group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
     }
   }
