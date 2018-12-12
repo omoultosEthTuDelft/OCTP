@@ -1,3 +1,10 @@
+/* ----------------------------------------------------------------------
+   fix ordern is a child class of "fix", developed based on two classes
+   of "fix ave/time" and "fix ave/correlate/long", provided by LAMMPS.
+   This command is distributed under the GNU General Public License.
+   Author: Seyed Hossein Jamali
+------------------------------------------------------------------------- */
+
 /* -*- c++ -*- ----------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
    http://lammps.sandia.gov, Sandia National Laboratories
@@ -36,7 +43,6 @@ class FixOrderN : public Fix {
   void invoke_scalar(bigint);
 
   #define MAXGROUPS 32
-  #define SQR(x) ((x)*(x))
 
   //void write_restart(FILE *);
   //void restart(char *);
@@ -55,6 +61,7 @@ class FixOrderN : public Fix {
   int tnbe;  // total number of block elements (elemets of similar timescales)
   int vecsize;  // number of vector elements constructed from nrows
   int sampsize; // number of vector elements for constructing sample arrays
+  int flag_Dxyz; // if components of diffusivities in x, y, & z should be written
 
   bigint nvalid;        // the next(current) timestep to call end_of_step()
   bigint nvalid_last;   // the previous timestep that end_of_step() was called
@@ -98,7 +105,13 @@ class FixOrderN : public Fix {
 
   // DIFFUSIVITY vairables
   double ***PosC_ii;
+  double ***PosC_iix;
+  double ***PosC_iiy;
+  double ***PosC_iiz;
   double ****PosC_ij;
+  double ****PosC_ijx;
+  double ****PosC_ijy;
+  double ****PosC_ijz;
   double ****PosCorrSum;
   int **groupinfo;
   int **atomingroup;

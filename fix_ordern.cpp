@@ -1,13 +1,8 @@
 /* ----------------------------------------------------------------------
    fix ordern is a child class of "fix", developed based on two classes
-   of "fix ave/time" and "fix ave/correlate/long", provided in LAMMPS.
+   of "fix ave/time" and "fix ave/correlate/long", provided by LAMMPS.
    This command is distributed under the GNU General Public License.
 ------------------------------------------------------------------------- */
-
-  //char str[128];
-  //snprintf(str,128,"Cannot open fix ordern file %sQQQ",filename2);
-  //error->one(FLERR,str);
-
 
 /* ----------------------------------------------------------------------
    LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator
@@ -20,10 +15,6 @@
    the GNU General Public License.
 
    See the README file in the top-level LAMMPS directory.
-------------------------------------------------------------------------- */
-
-/* ----------------------------------------------------------------------
-   Contributing author: Pieter in 't Veld (SNL)
 ------------------------------------------------------------------------- */
 
 #include <cstdlib>
@@ -64,18 +55,15 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   MPI_Comm_rank(world,&me);
 
   // Initial values
-  //eflag = 2;
-  //vflag = 5;
-  //thermo_energy = 1;
-  //peatom_flag = 1;
   startstep = 0;
+  flag_Dxyz = 0;
   tnb = 10;
   tnbe = 10;
   fp1 = NULL;
   fp2 = NULL;
   title = NULL;
   format_user = NULL;
-  format = (char *) "\t%g";
+  format = (char *) " %g";
   dynamic_group_allow = 0;  // the groups should not be modified.
 
   // SPECIFYING THE MAIN ARGUMENTS
@@ -130,29 +118,28 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   icompute = modify->find_compute(idcompute);     // id of the compute (int)
   nrows = modify->compute[icompute]->size_vector; // get the number of rows (int)
   Compute *compute = modify->compute[icompute];   // the whole compute class 
-  
 
   // PARSING OPTIONAL ARGUMENTS
   iarg = 7;
   while (iarg < narg) {
     // add more file options for mode == visocisty/diffusion/thermcond
     if (strcmp(arg[iarg],"file") == 0) {
-        if (mode == DIFFUSIVITY) {
-          if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
-          delete [] filename1;
-          filename1 = new char[strlen(arg[iarg+1])+1];
-          strcpy(filename1,arg[iarg+1]);
-          delete [] filename2;
-          filename2 = new char[strlen(arg[iarg+2])+1];
-          strcpy(filename2,arg[iarg+2]);
-          iarg += 3;
-        } else if (mode == THERMCOND || mode == VISCOSITY) {
-          if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
-          delete [] filename1;
-          filename1 = new char[strlen(arg[iarg+1])+1];
-          strcpy(filename1,arg[iarg+1]);
-          iarg += 2;
-        } else error->all(FLERR,"Illegal fix ordern command");
+      if (mode == DIFFUSIVITY) {
+        if (iarg+3 > narg) error->all(FLERR,"Illegal fix ordern command");
+        delete [] filename1;
+        filename1 = new char[strlen(arg[iarg+1])+1];
+        strcpy(filename1,arg[iarg+1]);
+        delete [] filename2;
+        filename2 = new char[strlen(arg[iarg+2])+1];
+        strcpy(filename2,arg[iarg+2]);
+        iarg += 3;
+      } else if (mode == THERMCOND || mode == VISCOSITY) {
+        if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
+        delete [] filename1;
+        filename1 = new char[strlen(arg[iarg+1])+1];
+        strcpy(filename1,arg[iarg+1]);
+        iarg += 2;
+      } else error->all(FLERR,"Illegal fix ordern command");
     } else if (strcmp(arg[iarg],"start") == 0) {
       if (iarg+2 > narg)
         error->all(FLERR,"Illegal fix ordern command");
@@ -183,9 +170,14 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       title = new char[n];
       strcpy(title,arg[iarg+1]);
       iarg += 2;
+    } else if (strcmp(arg[iarg],"Dxyz") == 0) {
+      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
+      if (strcmp(arg[iarg+1],"no") == 0) flag_Dxyz = 0;
+      else if (strcmp(arg[iarg+1],"yes") == 0) flag_Dxyz = 1;
+      else error->all(FLERR,"Illegal fix ordern command");
+      iarg += 2;
     } else error->all(FLERR,"Illegal fix ordern command");
   }
-
 
   // SETUP & ERROR CHECK
   // for fix inputs, check that fix frequency is acceptable
@@ -203,19 +195,15 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   if (modify->compute[icompute]->size_vector_variable)
     error->all(FLERR,"The size of the vector should be kept fixed");
 
-
   // DEFINING THE PARAMETERS AND VARILABLES
-
   count = -1;   // the number of samp
   cnb = 1;
   boltz = force->boltz;
   nktv2p = force->nktv2p;
 	  
-  
   // Specific variables for each mode
   if (mode == DIFFUSIVITY)  {
     deltat = (double) (nevery)*(update->dt);
-    //numgroup = group->ngroup;    // The total # of available groups
     vecsize = 3*atom->natoms;   // DOUBLE CHECK
     ngroup = 0;
   } else if (mode == VISCOSITY) {
@@ -240,16 +228,17 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     memory->create(samp,tnb,tnbe,sampsize,"fix/ordern:samp");
   } else if ( mode == DIFFUSIVITY)
   {
-    //memory->create(BlockDATA,tnb,atom->natoms,tnbe,3,"fix/ordern:BlockDATA");
     memory->create(PosC_ii,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_ii");
+    memory->create(PosC_iix,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_iix");
+    memory->create(PosC_iiy,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_iiy");
+    memory->create(PosC_iiz,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_iiz");
     memory->create(PosC_ij,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ij");
+    memory->create(PosC_ijx,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ijx");
+    memory->create(PosC_ijy,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ijy");
+    memory->create(PosC_ijz,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ijz");
     memory->create(PosCorrSum,tnb,tnbe,MAXGROUPS,3,"fix/ordern:PosCorrSum");
-    //memory->create(TmpPos,atom->natoms,4,"fix/ordern:TmpPos");
-    //memory->create(Groups,atom->natoms,3,"fix/ordern:Groups");
     memory->create(atomingroup,atom->natoms,2,"fix/ordern:atomingroup");
     memory->create(groupinfo,MAXGROUPS,2,"fix/ordern:groupinfo");
-    // int BlockLength[tnb];   (nbe)
-    // double count_samples[tnb][tnbe]; (nsamp)
   }
   memory->create(recdata,nrows,"fix/ordern:recdata"); // data passed from compute
   memory->create(nsamp,tnb,tnbe,"fix/ordern:nsamp");
@@ -273,7 +262,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   nvalid = nextvalid();
   modify->addstep_compute_all(nvalid);
 
-// Opening new data files to output data
+  // Opening new data files to output data  
   if (me == 0)  {
     if (mode == DIFFUSIVITY) {
       fp1 = fopen(filename1,"w");
@@ -290,6 +279,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       }
     }
   }
+
   // Writing the header lines to files
   if (fp1 && me == 0) {
     clearerr(fp1);
@@ -297,11 +287,6 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     if (mode == DIFFUSIVITY)  {
       fprintf(fp1,"#NOTE: divide self-diffusivities by the ");
       fprintf(fp1,"number of molecules of species i (N_i).\n");
-      //fprintf(fp1,"#Time\t");
-      //for (int k = 0; k <= numgroup; k++) {
-      //  fprintf(fp1,"Ds__%s\t",group->names[k]);      // DOUBLE CHECK  (groupinfo)
-      //}
-      //fprintf(fp1,"\n");
     } else if (mode == VISCOSITY) {
       fprintf(fp1,"#NOTE: divide shear viscosities by the temperature (T).\n");
       fprintf(fp1,"#Time\teta_xx\teta_yy\teta_zz\teta_xy\teta_xz\teta_yz\t");
@@ -312,7 +297,6 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     }
     if (ferror(fp1)) error->one(FLERR,"Error writing file header");
     filepos1 = ftell(fp1);
-        
   }
   if (fp2 && me == 0)  {
     clearerr(fp2);
@@ -320,21 +304,11 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     if (mode == DIFFUSIVITY) {
       fprintf(fp2,"#NOTE: divide Onsager coefficients ");
       fprintf(fp2,"by the total number of molecules (N).\n");
-      //fprintf(fp2,"#Time\t");
-      //for (int k = 0; k <= numgroup; k++) {
-      //  for (int l = 0; l <= k; l++) {
-      //    // DOUBLE CHECK (groupinfo)
-      //    fprintf(fp2,"Lambda__%s_%s\t",group->names[k],group->names[l]);
-      //  }
-      //}
-      //fprintf(fp2,"\n");
     }
   if (ferror(fp2)) error->one(FLERR,"Error writing file header");
   filepos2 = ftell(fp2);
   }
   delete [] title;
-
-
 }
 
 /* ---------------------------------------------------------------------- */
@@ -344,7 +318,6 @@ FixOrderN::~FixOrderN()
   delete [] format_user;
   if (fp1 && me == 0) fclose(fp1);
   if (fp2 && me == 0) fclose(fp2);
-  // DOUBLE CHECK: DELETE All arrays here
   if ( (mode == VISCOSITY) || (mode == THERMCOND) )
   {
     memory->destroy(data);
@@ -354,7 +327,13 @@ FixOrderN::~FixOrderN()
   } else if ( mode == DIFFUSIVITY)
   {
     memory->destroy(PosC_ii);
+    memory->destroy(PosC_iix);
+    memory->destroy(PosC_iiy);
+    memory->destroy(PosC_iiz);
     memory->destroy(PosC_ij);
+    memory->destroy(PosC_ijx);
+    memory->destroy(PosC_ijy);
+    memory->destroy(PosC_ijz);
     memory->destroy(PosCorrSum);
     memory->destroy(atomingroup);
     memory->destroy(groupinfo);
@@ -364,7 +343,6 @@ FixOrderN::~FixOrderN()
   memory->destroy(oldint);
   memory->destroy(rint);
   memory->destroy(nbe);
-  
 }
 
 /* ----------------------------------------------------------------------
@@ -426,8 +404,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   // update the next timestep to call end_of_step()
   modify->addstep_compute(ntimestep+nevery);
 
-
-  
   // invoke compute vector if not previously invoked
   // get the data from compute_vector and store it in recdata
   // the size of recdata is nrows
@@ -444,8 +420,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   // update the next timestep to call end_of_step()
   nvalid += nevery;
   modify->addstep_compute(nvalid);
-
-  // DOUBLE CHECK: HOW TO DEFINE first timestep
   if (count < 0)  
   {
     count = 0;
@@ -456,19 +430,13 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
       count++;
   }
 
-
   // From now, everything is computed only on the main core
   if (me != 0)  return;
-
-
-
-
 
   // Preliminary calculations for each transport property
   // Fill in the vector "data" accordingly
   if (mode == DIFFUSIVITY)  // DIFFUSION
   {
-    //int numgroup = group->ngroup; // The total # of available groups
     tnatom = atom->natoms;
     if (count == 0)   // only run during the first time step
     { 
@@ -479,7 +447,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
         ID = (int) (recdata[5*sortID+3]+0.1);
         atommask = (int) recdata[5*sortID+4]+0.1;
         int groupfound = 0;
-        // DOUBLE CHECK: ERROR IF AN ATOM BELONG TO TWO GROUPS
         if (ngroup > 0 ) // First try to match with available groups
         {
       	  for (j = 1; j <= ngroup; j++)
@@ -516,13 +483,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
           atomingroup[ID][0] = atomingroup[ID][1] = -1;
       }
 
-      // error start
-      //char str[128];
-      //snprintf(str,128,"Cannot open fix ordern file %d %d",ngroup,natom);
-      //error->one(FLERR,str);
-      // error finish
-
-
       // redefine the arrays for storing the positions
       memory->destroy(oldint);
       memory->create(oldint,tnb,tnbe,3*natom,"fix/ordern:oldint");
@@ -545,10 +505,16 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
             nsamp[i][j] = 0.0;
             for ( k = 0; k < MAXGROUPS; k++)
             {  
-              PosC_ii[i][j][k] =0.0;
+              PosC_ii[i][j][k] = 0.0;
+              PosC_iix[i][j][k] = 0.0;
+              PosC_iiy[i][j][k] = 0.0;
+              PosC_iiz[i][j][k] = 0.0;
               for ( l = 0; l < MAXGROUPS ; l++)
               {
                 PosC_ij[i][j][k][l] = 0.0;
+                PosC_ijx[i][j][k][l] = 0.0;
+                PosC_ijy[i][j][k][l] = 0.0;
+                PosC_ijz[i][j][k][l] = 0.0;
               }
             }
           }
@@ -567,8 +533,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
       rint[3*atomID+1] = recdata[5*sortID+1];
       rint[3*atomID+2] = recdata[5*sortID+2];
     }
-
-
   } else if (mode == VISCOSITY) // VISCOSITY
   {
     if (count == 0) {
@@ -629,10 +593,9 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
 	      {
 	        for ( k = 0; k < vecsize; k++)
           {
-	          // correction for dimensions in total, and adding kb and volume (WITHOUT TEMPERATURE)
 		        dist = rint[k]-oldint[i][j][k];
-	          //samp[i][j][k] += (dist*dist)*(1.0/inv_volume/2.0/boltz)*(1.0/nktv2p);
-	          samp[i][j][k] += (dist*dist);	// ADD THE COEFFICIENT LATER
+            // Add the coefficient later
+	          samp[i][j][k] += (dist*dist);	
 		        if ( (mode == VISCOSITY) && (k == vecsize-1) )
 		        {
 		          samp[i][j][vecsize] += (dist);
@@ -646,28 +609,41 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
             PosCorrSum[i][j][k][1] = 0;
             PosCorrSum[i][j][k][2] = 0;
           }
+          double distx, disty, distz;
+          double distx2, disty2, distz2;
           for (ID = 0; ID < tnatom ; ID++)
           {
             if (atomingroup[ID][0] < 0)
               continue;
             atomID = atomingroup[ID][0];
             atomgroup = atomingroup[ID][1];
-            PosC_ii[i][j][atomgroup] += 
-                ( SQR(oldint[i][j][3*atomID] - rint[3*atomID])
-                + SQR(oldint[i][j][3*atomID+1] - rint[3*atomID+1])
-                + SQR(oldint[i][j][3*atomID+2] - rint[3*atomID+2]) );
-            PosCorrSum[i][j][atomgroup][0] += (oldint[i][j][3*atomID] - rint[3*atomID]);
-            PosCorrSum[i][j][atomgroup][1] += (oldint[i][j][3*atomID+1] - rint[3*atomID+1]);
-            PosCorrSum[i][j][atomgroup][2] += (oldint[i][j][3*atomID+2] - rint[3*atomID+2]);
+            distx = oldint[i][j][3*atomID] - rint[3*atomID];
+            disty = oldint[i][j][3*atomID+1] - rint[3*atomID+1];
+            distz = oldint[i][j][3*atomID+2] - rint[3*atomID+2];
+            distx2 = distx*distx;
+            disty2 = disty*disty;
+            distz2 = distz*distz;
+            // Add coefficients (2.0 and 6.0) later
+            PosC_iix[i][j][atomgroup] += distx2;
+            PosC_iiy[i][j][atomgroup] += disty2;
+            PosC_iiz[i][j][atomgroup] += distz2;
+            PosC_ii[i][j][atomgroup] += (distx2 + disty2 + distz2);
+            PosCorrSum[i][j][atomgroup][0] += distx;
+            PosCorrSum[i][j][atomgroup][1] += disty;
+            PosCorrSum[i][j][atomgroup][2] += distz;
           }
           for ( k = 1 ; k <= ngroup ; k++)
           {
             for ( l = 1 ; l <= ngroup ; l++)
             {
-              PosC_ij[i][j][k][l] += 
-               + PosCorrSum[i][j][k][0] * PosCorrSum[i][j][l][0]
-          	   + PosCorrSum[i][j][k][1] * PosCorrSum[i][j][l][1]
-          	   + PosCorrSum[i][j][k][2] * PosCorrSum[i][j][l][2];
+              distx2 = PosCorrSum[i][j][k][0] * PosCorrSum[i][j][l][0];
+              disty2 = PosCorrSum[i][j][k][1] * PosCorrSum[i][j][l][1];
+              distz2 = PosCorrSum[i][j][k][2] * PosCorrSum[i][j][l][2];
+              // Add coefficients (2.0 and 6.0) later
+              PosC_ijx[i][j][k][l] += distx2;
+              PosC_ijy[i][j][k][l] += disty2;
+              PosC_ijz[i][j][k][l] += distz2;
+              PosC_ij[i][j][k][l] += ( distx2 + disty2 + distz2 ); 
             }
           }
         }
@@ -704,7 +680,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
 	  }
   }
 
-  // OUTPUT RESULTS TO FILES (fp1 and fp2) IF TIME == nfreq
+  // Output results to files (fp1 and fp2) if time == nfreq
   if (ntimestep % nfreq)  return;
   if (mode == DIFFUSIVITY)
     write_diffusivity();
@@ -714,14 +690,11 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
     write_thermcond();
 }
 
-
-
 /* ----------------------------------------------------------------------
    calculate nvalid = next step on which end_of_step does something
    lower bound is the smallest multiple of nevery larger than startstep
    used only in the initialization
 ------------------------------------------------------------------------- */
-
 bigint FixOrderN::nextvalid()
 {
   bigint nvalid = update->ntimestep;
@@ -756,7 +729,6 @@ void FixOrderN::integrate()
   return;
 }
 
-
 /*-------------------------------------------------------------------------
    Writing Order-n Results for Diffusivity into a File
 ------------------------------------------------------------------------- */
@@ -764,16 +736,32 @@ void FixOrderN::write_diffusivity()
 {
   fseek(fp1,filepos1,SEEK_SET);
   fseek(fp2,filepos2,SEEK_SET);
-  int i, j, k, l;
+  int i, j, k, l, xyz;
   // Writing the header
   fprintf(fp1,"#Time\t");
   fprintf(fp2,"#Time\t");
   for ( k = 1; k <= ngroup; k++)
   {
+    if (flag_Dxyz)
+    {
+      fprintf(fp1,"Ds__%s_x\t",group->names[groupinfo[k][0]]);
+      fprintf(fp1,"Ds__%s_y\t",group->names[groupinfo[k][0]]);
+      fprintf(fp1,"Ds__%s_z\t",group->names[groupinfo[k][0]]);
+    }
     fprintf(fp1,"Ds__%s\t",group->names[groupinfo[k][0]]);
     for ( l = k; l <= ngroup; l++)
     {
-      fprintf(fp2,"C__%s_%s\t",group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
+      if (flag_Dxyz)
+      {
+        fprintf(fp2,"C__%s_%s_x\t",
+          group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
+        fprintf(fp2,"C__%s_%s_y\t",
+          group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
+        fprintf(fp2,"C__%s_%s_z\t",
+          group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
+      }
+      fprintf(fp2,"C__%s_%s\t",
+        group->names[groupinfo[k][0]],group->names[groupinfo[l][0]]);
     }
   }
   fprintf(fp1,"\n");
@@ -791,10 +779,22 @@ void FixOrderN::write_diffusivity()
       fprintf(fp2,format,time);
       for( k = 1; k <= ngroup; k++ )
       {
-        fprintf(fp1,format,PosC_ii[i][tnbe-j][k]/nsamp[i][tnbe-j]);
+        if (flag_Dxyz)
+        {
+          fprintf(fp1,format,PosC_iix[i][tnbe-j][k]/nsamp[i][tnbe-j]/2.0);
+          fprintf(fp1,format,PosC_iiy[i][tnbe-j][k]/nsamp[i][tnbe-j]/2.0);
+          fprintf(fp1,format,PosC_iiz[i][tnbe-j][k]/nsamp[i][tnbe-j]/2.0);
+        }
+        fprintf(fp1,format,PosC_ii[i][tnbe-j][k]/nsamp[i][tnbe-j]/6.0);
         for( l = k; l <= ngroup; l++ )
         {
-          fprintf(fp2,format,PosC_ij[i][tnbe-j][k][l]/nsamp[i][tnbe-j]); 
+          if (flag_Dxyz)
+          {
+            fprintf(fp2,format,PosC_ijx[i][tnbe-j][k][l]/nsamp[i][tnbe-j]/2.0);
+            fprintf(fp2,format,PosC_ijy[i][tnbe-j][k][l]/nsamp[i][tnbe-j]/2.0);
+            fprintf(fp2,format,PosC_ijz[i][tnbe-j][k][l]/nsamp[i][tnbe-j]/2.0);
+          }
+          fprintf(fp2,format,PosC_ij[i][tnbe-j][k][l]/nsamp[i][tnbe-j]/6.0); 
         }
       }
       fprintf(fp1,"\n");
@@ -807,10 +807,8 @@ void FixOrderN::write_diffusivity()
   long fileend1 = ftell(fp1);
   if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
   long fileend2 = ftell(fp2);
-  if (fileend2 > 0) ftruncate(fileno(fp2),fileend2);
-  
+  if (fileend2 > 0) ftruncate(fileno(fp2),fileend2); 
 }
-
 
 /*-------------------------------------------------------------------------
    Writing Order-n Results for Viscosity into a File
@@ -868,7 +866,6 @@ void FixOrderN::write_viscosity()
   long fileend1 = ftell(fp1);
   if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
 }
-
 
 /*-------------------------------------------------------------------------
    Writing Order-n Results for Thermal Conductivity into a File
