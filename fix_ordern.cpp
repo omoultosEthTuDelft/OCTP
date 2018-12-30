@@ -57,6 +57,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // Initial values
   startstep = 0;
   flag_Dxyz = 0;
+  flag_TCconv = 0;
   tnb = 10;
   tnbe = 10;
   fp1 = NULL;
@@ -176,6 +177,12 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       else if (strcmp(arg[iarg+1],"yes") == 0) flag_Dxyz = 1;
       else error->all(FLERR,"Illegal fix ordern command");
       iarg += 2;
+    } else if (strcmp(arg[iarg],"TCconvective") == 0) {
+      if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
+      if (strcmp(arg[iarg+1],"no") == 0) flag_TCconv = 0;
+      else if (strcmp(arg[iarg+1],"yes") == 0) flag_TCconv = 1;
+      else error->all(FLERR,"Illegal fix ordern command");
+      iarg += 2;
     } else error->all(FLERR,"Illegal fix ordern command");
   }
 
@@ -215,8 +222,8 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     
   } else if (mode == THERMCOND) {
     deltat = (double) (2.0*nevery)*(update->dt);
-    vecsize = 3;
-    sampsize = 3;
+    vecsize = 6;
+    sampsize = 6;
   }
 
   // Order-n algorithm-specific parameters
@@ -288,10 +295,13 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     } else if (mode == VISCOSITY) {
       fprintf(fp1,"#NOTE: divide MSDs by the temperature (T).\n");
       fprintf(fp1,"#Time\tMSD_xx\tMSD_yy\tMSD_zz\tMSD_xy\tMSD_xz\tMSD_yz\t");
-      fprintf(fp1,"MSD_off\teta_all\tMSD_bulkvisc\n");
+      fprintf(fp1,"MSD_off\tMSD_all\tMSD_bulkvisc\n");
     } else if (mode == THERMCOND) {
       fprintf(fp1,"#NOTE: divide MSDs by the temperature^2).\n");
-      fprintf(fp1,"#Time\tMSD_x\tMSD_y\tMSD_z\tMSD_all\n");
+      fprintf(fp1,"#Time\tMSD_x\tMSD_y\tMSD_z\tMSD_all");
+      if (flag_TCconv)
+        fprintf(fp1,"\tMSDconvect_x\tMSDconvect_y\tMSDconvect_z\tMSDconvect_all");
+      fprintf(fp1,"\n");
     }
     if (ferror(fp1)) error->one(FLERR,"Error in writing file header for fix ordern command");
     filepos1 = ftell(fp1);
@@ -569,7 +579,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
           }
         }
     }
-    for (i = 0; i < 3; i++) data[i] = recdata[i];
+    for (i = 0; i < vecsize; i++) data[i] = recdata[i];
   }
 
   // INTEGRATION according to Simpson's rule
@@ -580,19 +590,19 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   }
 
   // ORDER-N ALGORITHM
-  // loop over all blocks
+  // Assign the number of active blocks
   i = count/(pow(tnbe,cnb));
   while (i != 0)
   {
     cnb++;
     i /= tnbe;
   }
-  for(i = 0; i < cnb; i++)
+  for(i = 0; i < cnb; i++)  // loop over all active blocks
   {
     if ((count)%((int)pow(tnbe,i))==0)
 	  {
 	    cnbe = MIN(nbe[i],tnbe);
-	    for (j=tnbe-1; j>=tnbe-cnbe; j--)
+	    for (j=tnbe-1; j>=tnbe-cnbe; j--) // loop over all active block elements
 	    {
         nsamp[i][j] += 1.0;
         if ( (mode == VISCOSITY) || (mode == THERMCOND) )
@@ -881,6 +891,7 @@ void FixOrderN::write_thermcond()
   fseek(fp1,filepos1,SEEK_SET);
   int i, j, k;
 	double totalcond;
+	double totalconvcond;
   double fluxcomp;
   double volume = (domain->xprd * domain->yprd * domain->zprd);
   double coef = (1.0/volume/2.0/boltz);
@@ -894,6 +905,7 @@ void FixOrderN::write_thermcond()
 	    time = (double) ((1.0*j)*(deltat)*pow(tnbe,i));
       fprintf(fp1,format,time);
 	    totalcond = 0.0;
+	    totalconvcond = 0.0;
 	    for (k = 0; k < 3; k++)
 	    {
 	      fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j];
@@ -901,6 +913,16 @@ void FixOrderN::write_thermcond()
 	      totalcond += fluxcomp/3.0;
 	    }
 	    fprintf(fp1,format,totalcond);
+      if (flag_TCconv)  // convective terms of the heat flux
+      {
+        for (k = 3; k < 6; k++)
+	      {
+	        fluxcomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j];
+          fprintf(fp1,format,fluxcomp);
+	        totalconvcond += fluxcomp/3.0;
+	      }
+	      fprintf(fp1,format,totalconvcond);
+      }
       fprintf(fp1,"\n");
 	  }
 	}
@@ -909,3 +931,43 @@ void FixOrderN::write_thermcond()
   long fileend1 = ftell(fp1);
   if (fileend1 > 0) ftruncate(fileno(fp1),fileend1);
 }
+
+/* ----------------------------------------------------------------------
+   Write Restart data to restart file
+   this is based on the command fix ave/correlate/long
+------------------------------------------------------------------------- */
+void FixOrderN::write_restart(FILE *fp)
+{
+  if (me == 0)
+  {
+    int i, j, k, l;
+    int nsize = 1;    // the size of the array for all varialbes
+    int n = 0;        // the counter of the array
+    double *list;     // the array written to the restart file
+    memory->create(list,nsize,"fix/ordern:list");
+    // FILL IN THE LIST //
+
+
+    // write to file and delete the dynamic array
+    int size = n*sizeof(double);
+    fwrite(&size,sizeof(int),1,fp);
+    fwrite(list,sizeof(double),n,fp);
+    memory->destroy(list);
+  }
+}
+
+/* ----------------------------------------------------------------------
+   use state info from restart file to restart the Fix
+   this is based on the command fix ave/correlate/long
+------------------------------------------------------------------------- */
+void FixOrderN::restart(char *buf)
+{
+  int n = 0;
+  double *list = (double *) buf;
+  // INPUT THE CONSTANTS to CHECK THE RESTART IS CORRECT
+  int modein = static_cast<int> (list[n++]);
+  // get all the variables and check here:
+  if ((modein!=mode) || 0 || 0)
+    error->all(FLERR,"Fix order: restart and input data are different");
+}
+

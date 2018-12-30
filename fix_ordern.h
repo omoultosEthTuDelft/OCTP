@@ -41,6 +41,9 @@ class FixOrderN : public Fix {
   void end_of_step();
   void invoke_scalar(bigint);
 
+  void write_restart(FILE *);
+  void restart(char *);
+
   #define MAXGROUPS 32
 
   //void write_restart(FILE *);
@@ -61,6 +64,7 @@ class FixOrderN : public Fix {
   int vecsize;  // number of vector elements constructed from nrows
   int sampsize; // number of vector elements for constructing sample arrays
   int flag_Dxyz; // if components of diffusivities in x, y, & z should be written
+  int flag_TCconv; // if convective components of thermal conductivity should be written
 
   bigint nvalid;        // the next(current) timestep to call end_of_step()
   bigint nvalid_last;   // the previous timestep that end_of_step() was called
