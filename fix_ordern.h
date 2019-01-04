@@ -44,12 +44,6 @@ class FixOrderN : public Fix {
   void write_restart(FILE *);
   void restart(char *);
 
-  #define MAXGROUPS 32
-
-  //void write_restart(FILE *);
-  //void restart(char *);
-  //double memory_usage();
-
  private:
 
   int me;   // the ID of the local processor
@@ -61,7 +55,7 @@ class FixOrderN : public Fix {
   int startstep;  // the first timestep that it starts sampling
   int tnb;   // total number of blocks (different time scales)
   int tnbe;  // total number of block elements (elemets of similar timescales)
-  int vecsize;  // number of vector elements constructed from nrows
+  int vecsize;  // number of vector elements constructed from nrows (exp. diff)
   int sampsize; // number of vector elements for constructing sample arrays
   int flag_Dxyz; // if components of diffusivities in x, y, & z should be written
   int flag_TCconv; // if convective components of thermal conductivity should be written
@@ -70,7 +64,7 @@ class FixOrderN : public Fix {
   bigint nvalid_last;   // the previous timestep that end_of_step() was called
 
   double deltat;    // timeinterval (nevery*dt)
-  double time;    // correlation time
+  double time;    // correlation time (only for writting data)
   double boltz;   // Boltzmann constant
   double nktv2p;  // conversion factors
   double volume;  // volume of the simulation box
@@ -98,10 +92,10 @@ class FixOrderN : public Fix {
   int count;			// how many cycles have been passed
   int icount;     // how many nevery, used for integration
   // ORDER-N ALGORITHM variables
-  double ***samp;		// samples of int(P^2) & int(P): 7+1
   double **nsamp;	// total number of samples
   double ***oldint;	// The lowest bound of the integral
-  int *nbe;	// (BlockLength) nuber of active elements of blocks
+  double *rint;   // running integral
+  int *nbe;	// (BlockLength) number of active elements of blocks
   int cnb;  // (NumberOfBlock) current active number of blocks
   int cnbe;	//  (CurrentBlockLength) current active number of elemets of the block 
 
@@ -119,7 +113,8 @@ class FixOrderN : public Fix {
   int **groupinfo;
   int **atomingroup;
   int atomgroup;  // the ID of each group
-  int ngroup ;  // total # of groups
+  int tngroup;  // total # of defined groups (tngroup >= ngroup)
+  int ngroup;  // total # of groups
   int tnatom;  // total # of atoms in system
   int natom;    // total # of atoms in groups
   int sortID;   // A virtual ID of the atom in a for loop (to tnatom)
@@ -128,10 +123,9 @@ class FixOrderN : public Fix {
   int atommask; // the group mask of an atom 
 
   // VISCOSITY/THERMCOND vairables
-  // order of data: dP_xx, dP_yy, dP_zz, P_xy, P_xz, P_yz, Phydro
+  double ***samp;		// samples of MSDs
   double *data;  // accumulated integrals
-  double sumP, numP, avgP;   // (avgpressure, sumpressure, numpressure) hydrostatic pressure
-  double *rint;   // running integral
+  double sumP, numP, avgP;   // hydrostatic pressure (sum/num = avg)
   double *simpf0, *simpf1; // Simpson's rule of integration
   double dist;			// (integral) The integral we need to sample, i.e., "accint-oldint"  
   

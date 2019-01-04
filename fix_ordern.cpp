@@ -53,6 +53,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   if (narg < 7) error->all(FLERR,"Illegal fix ordern command");
 
   MPI_Comm_rank(world,&me);
+  restart_global = 1;
 
   // Initial values
   startstep = 0;
@@ -211,8 +212,10 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // Specific variables for each mode
   if (mode == DIFFUSIVITY)  {
     deltat = (double) (nevery)*(update->dt);
-    vecsize = 3*atom->natoms;   // DOUBLE CHECK
-    ngroup = 0;
+    tngroup = group->ngroup + 1;  // the size of the arrays need (+1)
+    ngroup = 0;   // WILL BE OVERWRITTEN at count = 0 (# of groups for diffusion)
+    tnatom = atom->natoms; // Total # of atoms in the system (nrows = 5*tnatom)
+    vecsize = 0;   // WILL BE OVERWRITTEN at count = 0 (# of atoms in groups)
   } else if (mode == VISCOSITY) {
     deltat = (double) (2.0*nevery)*(update->dt);
     vecsize = 7;
@@ -233,25 +236,26 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     memory->create(simpf0,vecsize,"fix/ordern:simpf0");
     memory->create(simpf1,vecsize,"fix/ordern:simpf1");
     memory->create(samp,tnb,tnbe,sampsize,"fix/ordern:samp");
+    memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
+    memory->create(rint,vecsize,"fix/ordern:rint");
   } else if ( mode == DIFFUSIVITY)
   {
-    memory->create(PosC_ii,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_ii");
-    memory->create(PosC_iix,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_iix");
-    memory->create(PosC_iiy,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_iiy");
-    memory->create(PosC_iiz,tnb,tnbe,MAXGROUPS,"fix/ordern:PosC_iiz");
-    memory->create(PosC_ij,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ij");
-    memory->create(PosC_ijx,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ijx");
-    memory->create(PosC_ijy,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ijy");
-    memory->create(PosC_ijz,tnb,tnbe,MAXGROUPS,MAXGROUPS,"fix/ordern:PosC_ijz");
-    memory->create(PosCorrSum,tnb,tnbe,MAXGROUPS,3,"fix/ordern:PosCorrSum");
-    memory->create(atomingroup,atom->natoms,2,"fix/ordern:atomingroup");
-    memory->create(groupinfo,MAXGROUPS,2,"fix/ordern:groupinfo");
+    memory->create(PosC_ii,tnb,tnbe,tngroup,"fix/ordern:PosC_ii");
+    memory->create(PosC_iix,tnb,tnbe,tngroup,"fix/ordern:PosC_iix");
+    memory->create(PosC_iiy,tnb,tnbe,tngroup,"fix/ordern:PosC_iiy");
+    memory->create(PosC_iiz,tnb,tnbe,tngroup,"fix/ordern:PosC_iiz");
+    memory->create(PosC_ij,tnb,tnbe,tngroup,tngroup,"fix/ordern:PosC_ij");
+    memory->create(PosC_ijx,tnb,tnbe,tngroup,tngroup,"fix/ordern:PosC_ijx");
+    memory->create(PosC_ijy,tnb,tnbe,tngroup,tngroup,"fix/ordern:PosC_ijy");
+    memory->create(PosC_ijz,tnb,tnbe,tngroup,tngroup,"fix/ordern:PosC_ijz");
+    memory->create(PosCorrSum,tnb,tnbe,tngroup,3,"fix/ordern:PosCorrSum");
+    memory->create(atomingroup,tnatom,2,"fix/ordern:atomingroup");
+    memory->create(groupinfo,tngroup,2,"fix/ordern:groupinfo");
+    // NOTE: "oldint" and "rint" will be made at count = 0 in "invoke_scalar"
   }
   memory->create(recdata,nrows,"fix/ordern:recdata"); // data passed from compute
   memory->create(nsamp,tnb,tnbe,"fix/ordern:nsamp");
   memory->create(nbe,tnb,"fix/ordern:nbe");
-  memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
-  memory->create(rint,vecsize,"fix/ordern:rint");
   for (int i = 0; i < tnb; i++)  nbe[i]=1;
 
   // this fix produces a global scalar 
@@ -479,7 +483,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
         }
         if (groupfound == 0) // If no match, try to find a new group
         {
-          for (k = 1 ; k < MAXGROUPS; k++)
+          for (k = 1 ; k < tngroup; k++)
           {
             if ( atommask & group->bitmask[k] )
             {
@@ -500,10 +504,9 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
       }
 
       // redefine the arrays for storing the positions
-      memory->destroy(oldint);
-      memory->create(oldint,tnb,tnbe,3*natom,"fix/ordern:oldint");
-      memory->destroy(rint);
-      memory->create(rint,3*natom,"fix/ordern:rint");
+      vecsize = 3*natom;
+      memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
+      memory->create(rint,vecsize,"fix/ordern:rint");
       // initializing the arrays
       for(sortID = 0; sortID < tnatom ; sortID++)
       {
@@ -519,13 +522,13 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
           for ( j = 0; j < tnbe; j++)
           {
             nsamp[i][j] = 0.0;
-            for ( k = 0; k < MAXGROUPS; k++)
+            for ( k = 0; k < tngroup; k++)
             {  
               PosC_ii[i][j][k] = 0.0;
               PosC_iix[i][j][k] = 0.0;
               PosC_iiy[i][j][k] = 0.0;
               PosC_iiz[i][j][k] = 0.0;
-              for ( l = 0; l < MAXGROUPS ; l++)
+              for ( l = 0; l < tngroup ; l++)
               {
                 PosC_ij[i][j][k][l] = 0.0;
                 PosC_ijx[i][j][k][l] = 0.0;
@@ -698,6 +701,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
 
   // Output results to files (fp1 and fp2) if time == nfreq
   if (ntimestep % nfreq)  return;
+
   if (mode == DIFFUSIVITY)
     write_diffusivity();
   else if (mode == VISCOSITY)
@@ -941,8 +945,15 @@ void FixOrderN::write_restart(FILE *fp)
   if (me == 0)
   {
     int i, j, k, l;
-    int nsize = 1;    // the size of the array for all varialbes
-    int n = 0;        // the counter of the array
+    int nsize = 1 + 6 + 4; // initial + general + specific variables
+    if (mode == VISCOSITY)
+    {
+      nsize += 1;
+    } else if (mode == DIFFUSIVITY)
+    {
+      nsize += 1;
+    }
+    int n = 0;        // the counter over all components of the array
     double *list;     // the array written to the restart file
     memory->create(list,nsize,"fix/ordern:list");
     // FILL IN THE LIST //
@@ -950,7 +961,7 @@ void FixOrderN::write_restart(FILE *fp)
 
     // write to file and delete the dynamic array
     int size = n*sizeof(double);
-    fwrite(&size,sizeof(int),1,fp);
+    fwrite(&size,sizeof(int),1,fp);   // write the start of the array
     fwrite(list,sizeof(double),n,fp);
     memory->destroy(list);
   }
