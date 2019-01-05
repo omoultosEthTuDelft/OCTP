@@ -59,6 +59,7 @@ class FixOrderN : public Fix {
   int sampsize; // number of vector elements for constructing sample arrays
   int flag_Dxyz; // if components of diffusivities in x, y, & z should be written
   int flag_TCconv; // if convective components of thermal conductivity should be written
+  int restart_continue; // checks to not sample twice in a timestep due to restarting
 
   bigint nvalid;        // the next(current) timestep to call end_of_step()
   bigint nvalid_last;   // the previous timestep that end_of_step() was called
@@ -192,6 +193,18 @@ E: Error in writing file header for fix ordern command
 Self-explanatory.
 
 E: Invalid timestep reset for fix order
+
+Self-explanatory.
+
+E: restart is not possible with different parameters
+
+Self-explanatory.
+
+E: restart error: change in the number of group
+
+Self-explanatory.
+
+E: restart error: change in the number of atoms
 
 Self-explanatory.
 

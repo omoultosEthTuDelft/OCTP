@@ -56,6 +56,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   restart_global = 1;
 
   // Initial values
+  restart_continue = 0;
   startstep = 0;
   flag_Dxyz = 0;
   flag_TCconv = 0;
@@ -212,7 +213,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   // Specific variables for each mode
   if (mode == DIFFUSIVITY)  {
     deltat = (double) (nevery)*(update->dt);
-    tngroup = group->ngroup + 1;  // the size of the arrays need (+1)
+    tngroup = group->ngroup ;  // the size of the arrays (group "all" included)
     ngroup = 0;   // WILL BE OVERWRITTEN at count = 0 (# of groups for diffusion)
     tnatom = atom->natoms; // Total # of atoms in the system (nrows = 5*tnatom)
     vecsize = 0;   // WILL BE OVERWRITTEN at count = 0 (# of atoms in groups)
@@ -260,7 +261,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 
   // this fix produces a global scalar 
   // intensive/extensive flags set by compute that produces value
-  // This fix produces only a SCALAR value that I don't know yet (DOUBLE CHECK)
+  // This fix produces only a SCALAR value (The timestep)
   scalar_flag = 1;
   vector_flag = 0;
   extscalar = 0;
@@ -418,7 +419,7 @@ void FixOrderN::end_of_step()
 
 void FixOrderN::invoke_scalar(bigint ntimestep)
 {
-  
+
   int i,j,k,l;
   double scalar = ntimestep;
   // update the next timestep to call end_of_step()
@@ -440,6 +441,14 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   // update the next timestep to call end_of_step()
   nvalid += nevery;
   modify->addstep_compute(nvalid);
+  // Check if this timestep has not been sampled during restarting
+  if (restart_continue)
+  {
+    restart_continue = 0;
+    return;
+  }
+
+
   if (count < 0)  
   {
     count = 0;
@@ -457,7 +466,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   // Fill in the vector "data" accordingly
   if (mode == DIFFUSIVITY)  // DIFFUSION
   {
-    tnatom = atom->natoms;
     if (count == 0)   // only run during the first time step
     { 
       natom = 0;
@@ -503,8 +511,8 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
           atomingroup[ID][0] = atomingroup[ID][1] = -1;
       }
 
-      // redefine the arrays for storing the positions
       vecsize = 3*natom;
+      // NOTE: "oldint" and "rint" are constructed hear at count = 0
       memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
       memory->create(rint,vecsize,"fix/ordern:rint");
       // initializing the arrays
@@ -584,7 +592,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
     }
     for (i = 0; i < vecsize; i++) data[i] = recdata[i];
   }
-
+  
   // INTEGRATION according to Simpson's rule
   if (mode == VISCOSITY || mode == THERMCOND)
   {
@@ -946,22 +954,91 @@ void FixOrderN::write_restart(FILE *fp)
   {
     int i, j, k, l;
     int nsize = 1 + 6 + 4; // initial + general + specific variables
-    if (mode == VISCOSITY)
-    {
-      nsize += 1;
-    } else if (mode == DIFFUSIVITY)
-    {
-      nsize += 1;
+    nsize += (tnb + tnb*tnbe + tnb*tnbe*vecsize + vecsize); // nbe,nsamp,oldint,rint
+    if ( (mode == VISCOSITY) || (mode == THERMCOND) ) {
+      nsize += (tnb*tnbe*sampsize + vecsize*3); // samp, simpf0, simpf1, data
+    } else if (mode == DIFFUSIVITY) {
+      nsize += (tnb*tnbe*tngroup*(4 + 5*tngroup)); // 4*PosC_ii,4*PosC_ij,PosCorrSum
+      nsize += (2*tngroup + 2*tnatom);  // groupinfo, atomingroup
     }
     int n = 0;        // the counter over all components of the array
     double *list;     // the array written to the restart file
     memory->create(list,nsize,"fix/ordern:list");
-    // FILL IN THE LIST //
-
-
+    // Parameters of the simulation //
+    list[n++] = mode;
+    list[n++] = tnb;
+    list[n++] = tnbe;
+    list[n++] = vecsize;
+    list[n++] = count;
+    list[n++] = cnb;
+    if ( (mode == VISCOSITY) || (mode == THERMCOND) ) {
+      list[n++] = sampsize;
+      list[n++] = icount;
+      list[n++] = sumP;
+      list[n++] = numP;
+    } else if (mode == DIFFUSIVITY) {
+      list[n++] = ngroup;
+      list[n++] = natom;
+      list[n++] = tngroup;
+      list[n++] = tnatom;
+    }
+    // General Arrays
+    for (i = 0; i < tnb; i++) {
+      list[n++] = nbe[i];
+      for (j = 0; j < tnbe; j++)  {
+        list[n++] = nsamp[i][j];
+        for (k = 0; k < vecsize; k++)  {
+          list[n++] = oldint[i][j][k];
+        }
+      }
+    }
+    for (k = 0; k < vecsize; k++)  {
+      list[n++] = rint[k];
+    }
+    // Specific Arrays
+    if ( (mode == VISCOSITY) || (mode == THERMCOND) ) {
+      for (k = 0; k < vecsize; k++)  {
+        list[n++] = data[k];
+        list[n++] = simpf0[k];
+        list[n++] = simpf1[k];
+      }
+      for (i = 0; i < tnb; i++)  {
+        for (j = 0; j < tnbe; j++)  {
+          for (k = 0; k < sampsize; k++)  {
+            list[n++] = samp[i][j][k];
+          }
+        }
+      }
+    } else if (mode == DIFFUSIVITY) {
+      for (i = 0; i < tnb; i++)  {
+        for (j = 0; j < tnbe; j++)  {
+          for (k = 0; k < tngroup; k++)  {
+            list[n++] = PosC_ii[i][j][k];
+            list[n++] = PosC_iix[i][j][k];
+            list[n++] = PosC_iiy[i][j][k];
+            list[n++] = PosC_iiz[i][j][k];
+            for (l = 0; l < tngroup; l++)  {
+              list[n++] = PosC_ij[i][j][k][l];
+              list[n++] = PosC_ijx[i][j][k][l];
+              list[n++] = PosC_ijy[i][j][k][l];
+              list[n++] = PosC_ijz[i][j][k][l];
+              list[n++] = PosCorrSum[i][j][k][l];
+            }
+          }
+        }
+      }
+      for (i = 0; i < tngroup; i++)  {
+        list[n++] = groupinfo[i][0];
+        list[n++] = groupinfo[i][1];
+      }
+      for (i = 0; i < tnatom; i++)  {
+        list[n++] = atomingroup[i][0];
+        list[n++] = atomingroup[i][1];
+      }
+    }
     // write to file and delete the dynamic array
     int size = n*sizeof(double);
-    fwrite(&size,sizeof(int),1,fp);   // write the start of the array
+    fwrite(&size,sizeof(int),1,fp);   // write the size
     fwrite(list,sizeof(double),n,fp);
     memory->destroy(list);
   }
@@ -973,12 +1050,93 @@ void FixOrderN::write_restart(FILE *fp)
 ------------------------------------------------------------------------- */
 void FixOrderN::restart(char *buf)
 {
+  int i, j, k, l;
   int n = 0;
   double *list = (double *) buf;
-  // INPUT THE CONSTANTS to CHECK THE RESTART IS CORRECT
-  int modein = static_cast<int> (list[n++]);
-  // get all the variables and check here:
-  if ((modein!=mode) || 0 || 0)
-    error->all(FLERR,"Fix order: restart and input data are different");
+  // Important parameters of the simulation
+  int re_mode = static_cast<int> (list[n++]);
+  int re_tnb = static_cast<int> (list[n++]);
+  int re_tnbe = static_cast<int> (list[n++]);
+  // Check here if there is an agreement:
+  if ( (re_mode!=mode) || (re_tnb!=tnb) || (re_tnbe!=tnbe) )
+    error->all(FLERR,"Fix ordern: restart is not possible with different parameters");
+  // Rest of all parameters
+  vecsize = static_cast<int> (list[n++]);
+  count = static_cast<int> (list[n++]);
+  cnb = static_cast<int> (list[n++]);
+  if ( (mode == VISCOSITY) || (mode == THERMCOND) ) {
+    sampsize = static_cast<int> (list[n++]);
+    icount = static_cast<int> (list[n++]);
+    sumP =  list[n++];
+    numP =  list[n++];
+  } else if (mode == DIFFUSIVITY) {
+    ngroup = static_cast<int> (list[n++]);
+    natom = static_cast<int> (list[n++]);
+    int re_tngroup = static_cast<int> (list[n++]);
+    if (re_tngroup!=tngroup)
+      error->all(FLERR,"Fix ordern: restart error: change in the number of group");
+    int re_tnatom = static_cast<int> (list[n++]);
+    if ( re_tnatom!=tnatom )
+      error->all(FLERR,"Fix ordern: restart error: change in the number of atoms");
+    // NOTE: oldint and rint are not made in the constructor; they must be made here
+    memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
+    memory->create(rint,vecsize,"fix/ordern:rint");
+  }
+  // General Arrays
+  for (i = 0; i < tnb; i++) {
+    nbe[i] = static_cast<int> (list[n++]);
+    for (j = 0; j < tnbe; j++)  {
+      nsamp[i][j] = list[n++];
+      for (k = 0; k < vecsize; k++)  {
+        oldint[i][j][k] = list[n++];
+      }
+    }
+  }
+  for (k = 0; k < vecsize; k++)  {
+    rint[k] = list[n++];
+  }
+  // Specific Arrays
+  if ( (mode == VISCOSITY) || (mode == THERMCOND) ) {
+    for (k = 0; k < vecsize; k++)  {
+      data[k] = list[n++];
+      simpf0[k] = list[n++];
+      simpf1[k] = list[n++];
+    }
+    for (i = 0; i < tnb; i++)  {
+      for (j = 0; j < tnbe; j++)  {
+        for (k = 0; k < sampsize; k++)  {
+          samp[i][j][k] = list[n++];
+        }
+      }
+    }
+  } else if (mode == DIFFUSIVITY) {    
+    for (i = 0; i < tnb; i++)  {
+      for (j = 0; j < tnbe; j++)  {
+        for (k = 0; k < tngroup; k++)  {
+          PosC_ii[i][j][k] = list[n++];
+          PosC_iix[i][j][k] = list[n++];
+          PosC_iiy[i][j][k] = list[n++];
+          PosC_iiz[i][j][k] = list[n++];
+          for (l = 0; l < tngroup; l++)  {
+            PosC_ij[i][j][k][l] = list[n++];
+            PosC_ijx[i][j][k][l] = list[n++];
+            PosC_ijy[i][j][k][l] = list[n++];
+            PosC_ijz[i][j][k][l] = list[n++];
+            PosCorrSum[i][j][k][l] = list[n++];
+          }
+        }
+      }
+    }
+    for (i = 0; i < tngroup; i++)  {
+      groupinfo[i][0] = static_cast<int> (list[n++]);
+      groupinfo[i][1] = static_cast<int> (list[n++]);
+    }
+    for (i = 0; i < tnatom; i++)  {
+      atomingroup[i][0] = static_cast<int> (list[n++]);
+      atomingroup[i][1] = static_cast<int> (list[n++]);
+    }
+  }
+  bigint ntimestep = update->ntimestep;
+  if ( (ntimestep % nevery) == 0 )    restart_continue = 1;
 }
 
