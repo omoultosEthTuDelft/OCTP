@@ -295,14 +295,19 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     clearerr(fp1);
     if (title) fprintf(fp1,"%s\n",title);
     if (mode == DIFFUSIVITY)  {
-      fprintf(fp1,"#NOTE: divide MSDs by the ");
-      fprintf(fp1,"number of molecules of species i (N_i).\n");
+      fprintf(fp1,"#NOTE: MSDs should be divided by ");
+      fprintf(fp1,"the number of molecules of species i (N_i).\n");
+      fprintf(fp1,"#NOTE: MSDs have been divided by ");
+      fprintf(fp1,"the factor 6 (or 2, i.e., MSD_x, MSD_y, and MSD_z).\n");
     } else if (mode == VISCOSITY) {
-      fprintf(fp1,"#NOTE: divide MSDs by the temperature (T).\n");
+      fprintf(fp1,"#NOTE: MSDs should be divided by the temperature.\n");
+      fprintf(fp1,"#NOTE: MSDs have been divided by ");
+      fprintf(fp1,"2 or 10 (i.e., the viscosity computed from all components).\n");
       fprintf(fp1,"#Time\tMSD_xx\tMSD_yy\tMSD_zz\tMSD_xy\tMSD_xz\tMSD_yz\t");
       fprintf(fp1,"MSD_off\tMSD_all\tMSD_bulkvisc\n");
     } else if (mode == THERMCOND) {
-      fprintf(fp1,"#NOTE: divide MSDs by the temperature^2).\n");
+      fprintf(fp1,"#NOTE: MSDs should be divided by (temperature^2).\n");
+      fprintf(fp1,"#NOTE: MSDs have been divided by 2.\n");
       fprintf(fp1,"#Time\tMSD_x\tMSD_y\tMSD_z\tMSD_all");
       if (flag_TCconv)
         fprintf(fp1,"\tMSDconvect_x\tMSDconvect_y\tMSDconvect_z\tMSDconvect_all");
@@ -315,8 +320,10 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     clearerr(fp2);
     if (title) fprintf(fp2,"%s\n",title);
     if (mode == DIFFUSIVITY) {
-      fprintf(fp2,"#NOTE: divide Onsager coefficients ");
-      fprintf(fp2,"by the total number of molecules (N).\n");
+      fprintf(fp2,"#NOTE: MSDs should be divided by ");
+      fprintf(fp2,"the total number of molecules (N).\n");
+      fprintf(fp1,"#NOTE: MSDs have been divided by ");
+      fprintf(fp1,"the factor 6 (or 2, i.e., MSD_x, MSD_y, and MSD_z).\n");
     }
   if (ferror(fp2)) error->one(FLERR,"Error in writing file header for fix ordern command");
   filepos2 = ftell(fp2);
