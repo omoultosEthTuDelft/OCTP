@@ -110,7 +110,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     } else break;
   }
   if (nvalues == 0) error->all(FLERR,"Incorrect number of inputs for fix ordern command");
-  if (nvalues > 1) error->all(FLERR,"Incorrect number of inputs for fix ordern command");
+  if (nvalues > 1) error->all(FLERR,"Incorrect number of inputs for fix ordern command"); 
   char *suffix = new char[strlen(arg[6])];
   strcpy(suffix,&arg[6][2]);
   char *ptr = strchr(suffix,'[');
