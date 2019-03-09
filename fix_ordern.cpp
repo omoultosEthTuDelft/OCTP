@@ -29,10 +29,10 @@
 #include "variable.h"
 #include "memory.h"
 #include "error.h"
-
 #include "group.h"
 #include "domain.h"
 #include "atom.h"
+#include "citeme.h"
 
 
 using namespace LAMMPS_NS;
@@ -43,12 +43,25 @@ enum{VISCOSITY,THERMCOND,DIFFUSIVITY};
 
 #define INVOKED_VECTOR 2
 
+static const char cite_fix_ordern[] =
+"fix ave/ordern command:\n\n"
+"@Article{Jamali2019,\n"
+" author = {Jamali, Seyed Hossein and Wolf, Ludger and Becker, Tim M. and de Groen, Mariëtte and Ramdin, Mahinder and Hartkamp, Remco and Bardow, André and Vlugt, Thijs J. H. and Moultos, Othonas A.},\n"
+" title = {OCTP: A Tool for On-the-Fly Calculation of Transport Properties of Fluids with the Order-n Algorithm in LAMMPS},\n"
+" doi = {10.1021/acs.jcim.8b00939},\n"
+" journal = {J. Chem. Inf. Model.},\n"
+" year = {2019},\n"
+" volume = {XX},\n"
+" pages = {XXXX-XXXX}\n"
+"}\n\n";
+
 
 /* ---------------------------------------------------------------------- */
 
 FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
+  if (lmp->citeme) lmp->citeme->add(cite_fix_ordern);
   // At least 7 arguments are needed: [0-2], MODE, nevery, nwrite, value 
   if (narg < 7) error->all(FLERR,"Illegal fix ordern command");
 
