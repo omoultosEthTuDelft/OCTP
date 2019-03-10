@@ -1,13 +1,5 @@
 On-the-fly Calculation of Transport Properties of Fluids using the order-n algorithm in Equilibrium Molecular Dynamics. More information on how this plugin works and how this plugin can be used inside LAMMPS is thoroughly explained in the work of Jamali et al. (2019). If this package is used, please cite the following article:
-@Article{Jamali2019,
- author = {Jamali, Seyed Hossein and Wolf, Ludger and Becker, Tim M. and de Groen, Mariëtte and Ramdin, Mahinder and Hartkamp, Remco and Bardow, André  and Vlugt, Thijs J. H. and Moultos, Othonas A.},
- title = {OCTP: A Tool for On-the-Fly Calculation of Transport Properties of Fluids with the Order-n Algorithm in LAMMPS},
- doi = {10.1021/acs.jcim.8b00939},
- journal = {J. Chem. Inf. Model.},
- year = {2019},
- volume = {XX},
- pages = {XXXX-XXXX}
-}
+Jamali SH, Wolff L, Becker TM, de Groen M, Ramdin M, Hartkamp R, Bardow A, Vlugt TJH, Moultos OA. OCTP: A Tool for On-the-Fly Calculation of Transport Properties of Fluids with the Order-n Algorithm in LAMMPS. Journal of Chemical Information and Modeling. 2019 Feb 11.
 
 This plugin consists of two new compute commands (position and rdf/ext) and one new fix command (ordern) for LAMMPS. For more information on the use of these new commands as well as a LAMMPS input file for the calcualation of transport properties for a water-methanol mixture, the user is referred to the work of Jamali et al. (submitted to J. Chem. Inf. Model., 2019)
 

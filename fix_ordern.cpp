@@ -52,7 +52,7 @@ static const char cite_fix_ordern[] =
 " journal = {J. Chem. Inf. Model.},\n"
 " year = {2019},\n"
 " volume = {XX},\n"
-" pages = {XXXX-XXXX}\n"
+" pages = {XXXX-XXXX}\n "
 "}\n\n";
 
 
