@@ -51,8 +51,8 @@ static const char cite_fix_ordern[] =
 " doi = {10.1021/acs.jcim.8b00939},\n"
 " journal = {J. Chem. Inf. Model.},\n"
 " year = {2019},\n"
-" volume = {XX},\n"
-" pages = {XXXX-XXXX}\n "
+" volume = {59},\n"
+" pages = {1290-1294}\n "
 "}\n\n";
 
 
