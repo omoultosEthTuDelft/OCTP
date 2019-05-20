@@ -1,0 +1,5 @@
+The OCTP plugin uses the stress per atom computation of LAMMPS to yield the MSD of heat flux from which the thermal
+conductivity can be computed. However, the OCTP user should be aware of the fact that the atomic stress approximation
+may produce erroneous results in the case of heat flux when applied to systems with many-body interactions (e.g., angles, 
+torsions, improper torsions). This results in incorrect thermal conductivity values. More details can be found in the 
+work by Surblys et al. (PHYSICAL REVIEW E 99, 051301, 2019 - DOI: 10.1103/PhysRevE.99.051301).
