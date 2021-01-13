@@ -54,11 +54,11 @@ ComputeRDFExtend::ComputeRDFExtend(LAMMPS *lmp, int narg, char **arg) :
   while (iarg < narg) {
     if (strcmp(arg[iarg],"Nbin") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal compute rdf/ext command");
-      binsize = force->inumeric(FLERR,arg[iarg+1]);
+      binsize = utils::inumeric(FLERR,arg[iarg+1],false,lmp);
       iarg += 2;
     } else if (strcmp(arg[iarg],"Nwrite") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal compute rdf/ext command");
-      WriteFileEvery = force->inumeric(FLERR,arg[iarg+1]);
+      WriteFileEvery = utils::inumeric(FLERR,arg[iarg+1],false,lmp);
       iarg += 2;
     } else if (strcmp(arg[iarg],"file") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");

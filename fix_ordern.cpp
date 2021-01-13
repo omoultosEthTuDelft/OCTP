@@ -107,9 +107,9 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   } else 
     error->all(FLERR,"Illegal fix ordern command");
   // rate of sampling (end_of_step())
-  nevery = force->inumeric(FLERR,arg[4]); 
+  nevery = utils::inumeric(FLERR,arg[4],false,lmp); 
   // rate of writing files
-  nfreq = force->inumeric(FLERR,arg[5]);  
+  nfreq = utils::inumeric(FLERR,arg[5],false,lmp);  
   global_freq = nevery;  
 
   // OBTAINING THE ID OF COMPUTE FOR THIS FIX
@@ -159,17 +159,17 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     } else if (strcmp(arg[iarg],"start") == 0) {
       if (iarg+2 > narg)
         error->all(FLERR,"Illegal fix ordern command");
-      startstep = force->inumeric(FLERR,arg[iarg+1]);
+      startstep = utils::inumeric(FLERR,arg[iarg+1],false,lmp);
       iarg += 2;
     } else if (strcmp(arg[iarg],"nb") == 0) {
       if (iarg+2 > narg)
         error->all(FLERR,"Illegal fix ordern command");
-      tnb = force->inumeric(FLERR,arg[iarg+1]);
+      tnb = utils::inumeric(FLERR,arg[iarg+1],false,lmp);
       iarg += 2;
     } else if (strcmp(arg[iarg],"nbe") == 0) {
       if (iarg+2 > narg)
         error->all(FLERR,"Illegal fix ordern command");
-      tnbe = force->inumeric(FLERR,arg[iarg+1]);
+      tnbe = utils::inumeric(FLERR,arg[iarg+1],false,lmp);
       iarg += 2;
     } else if (strcmp(arg[iarg],"format") == 0) {
       if (iarg+2 > narg) error->all(FLERR,"Illegal fix ordern command");
