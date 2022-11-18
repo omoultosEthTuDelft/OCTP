@@ -451,6 +451,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   // !!!JELLE!!! his section calls the data out of the compute function. (Works generally for all modes right now, but not in the future):
   // 1. In the future implementation, we can refer to multiple computes, so we need to make this an if statement (if ( (mode == DIFFUSION) ) use method which can deal with multiple computes)
   // 2. This might be the best location to compute the COM of the chunks and store that in a large array and name that recdata again.
+  // 3. This computation of the COM of the chunks should be MPI operated and then end by correctly retrieve COM list from all threads.
   double scalar = ntimestep;
   // update the next timestep to call end_of_step()
   modify->addstep_compute(ntimestep+nevery);
