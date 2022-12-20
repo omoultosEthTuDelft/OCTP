@@ -1,0 +1,41 @@
+#!/bin/bash
+
+n=6
+src_path=../../..
+
+# check if user specified $1 and $2
+if [ -z "$2" ]; then
+    echo "Need two arguments"
+    echo "Usage: ./runMD.sh <input directory> <output directory to be created>"
+    exit 1
+fi
+
+# check if $1 is an existing directory, abort if it is not
+if [ ! -d "$1" ]; then
+    echo "Input directory $1 does not exist."
+    exit 1
+fi
+
+# check if $2 is an existing directory
+if [ -d "$2" ]; then
+    echo "Output directory $1 already exists."
+    exit 1
+fi
+
+# create directory $1
+
+mkdir $2
+# copy the directory "in" and its contents into 
+# the new directory $1
+cp -r $1 $2/input_used
+# copy plot.py into the new directory $1
+mkdir $2/plots
+cp plot.py $2/plots/plot.py
+
+
+cd $2 || exit
+mpirun -n $n $src_path/lmp_mpi -in input_used/in.methane
+wait
+
+
+exit 0

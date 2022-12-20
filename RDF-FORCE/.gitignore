@@ -1,0 +1,8 @@
+methane/out*
+rdf_post/frdf
+rdf_post/frdf_original
+rdf_post/frdf
+rdf_post/frdf_omp
+build
+# any file in cases or a subdirectory of cases starting with out
+cases/*/out*

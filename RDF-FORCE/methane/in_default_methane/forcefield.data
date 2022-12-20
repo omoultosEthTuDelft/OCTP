@@ -1,0 +1,15 @@
+# ----------------- INTERMOLECULAR POTENTIAL -------------------
+# ---------------Developed for LJ test case -------------- -----
+
+mass 1 16.04 # LJ
+
+pair_style lj/cut 20.0
+pair_modify tail yes # ATC 
+
+#-----------------Combinations----------------------------
+		
+pair_coeff 1 1 0.294 3.73     # LJ-LJ
+
+
+
+

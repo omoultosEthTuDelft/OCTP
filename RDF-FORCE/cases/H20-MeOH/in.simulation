@@ -1,0 +1,105 @@
+####################################################
+# EXAMPLE for using the OCTP plugin
+# Transport properties of an equimolar mixture of
+# water-methanol at 298 K and 1 atm. 
+#################### SETTING UP ####################
+units real
+dimension 3
+newton off
+boundary p p p
+atom_style full
+
+#################### VARIABLES ####################
+variable Temp equal 298       # Temperature in K
+variable Pres equal 1.0       # Pressure in atm.
+
+variable RandomSeed equal 100 # The random seed for velocity
+variable tstep equal 1.0      # 1fs 
+
+variable Ninvt equal 50000    # Initialize the NVT ensemble
+variable Nrun equal 300000    # Production in the NVT ensemble (energy)
+
+# variable Nf equal 10000       # Nfreq (fix ave/time and thermo)
+variable Nf equal ${Nrun}/10       # Nfreq (fix ave/time and thermo)
+variable Ne equal  10         # Nevery (fix ave/time)
+variable Nr equal ${Nf}/${Ne} # Nrepeat (fix ave/time)
+variable Nd equal ${Nrun}/10 # Frequency of outputting positions of atoms in the NVT ensemble
+
+variable Nrdfe equal 100      # Nevery for RDF (fix ave/time)
+variable Nrdfw equal ${Nrun}/${Nrdfe}   # Nwrite for RDF (compute rdf/ext: write every (Nrdfw*Nrdfe)) 
+                                        # i.e number of samples in average
+# variable Nrdfr equal ${Nrdfw}/${Nrdfe}
+
+variable Nfrdfe equal 100      # Nevery for FRDF (fix ave/time)
+variable Nfrdfr equal (${Nrun}-1000)/${Nfrdfe}    # Number of samples in frdf average
+variable Nfrdff equal ${Nrun}
+
+variable binnum equal 2000    # Number of bins for RDF
+
+#################### ATOM DEFINITION and FORCEFIELD ####################
+read_data ./input_used/data.system                     # read the positions
+include ./input_used/forcefield.data                # read the force field
+
+# replicate 8 8 8
+
+#################### INITIALIZATION ####################
+# groups for the central atoms of water (O) and methanol (O)
+group wat type 5      # The Oxygen of WATER molecules
+group met type 4      # The Oxygen of METHANOL molecules
+
+# neigbor lists
+neighbor 2.0 bin
+neigh_modify every 1 delay 0 check yes
+
+# velocity-Verlet integrator
+run_style verlet
+
+# minimizing the system using the conjugate gradient method
+min_style cg
+min_modify dmax 0.05 
+minimize 1.0e-6 1.0e-6 1000 10000
+reset_timestep 0
+
+# initializing velocities
+velocity all create ${Temp} ${RandomSeed}  
+
+# rate of writing thermal properties to the log file
+thermo ${Nf}
+
+# run in  NVT
+fix integrate all nvt temp ${Temp} ${Temp} 100.0
+
+# initialize the system in NVT
+timestep ${tstep}
+run ${Ninvt}
+reset_timestep 0
+
+
+#################### 2) Simulating RDFs and energy/temp in NVT ensemble #################
+
+compute T all temp
+fix TempAve all ave/time 1 1 ${Nrdfe} c_T file temperature.dat
+
+# computing the RDF for all group pairs using OCTP rdf/ext
+compute rdfs all rdf/ext Nbin ${binnum} Nwrite ${Nrdfw} file rdf_ext.dat
+fix f4 all ave/time 1 1 ${Nrdfe} c_rdfs
+
+# computing the RDF for all group pairs using lammps rdf 
+compute rdf all rdf ${binnum}
+
+# computing the RDF for all group pairs using force rdf
+compute rdff all rdf/force ${binnum}
+fix f6 all ave/time ${Nfrdfe} ${Nfrdfr} ${Nfrdff} c_rdff[*] file rdf_force.dat mode vector
+
+# Thermo style for outputing system properties to the log file
+thermo_style custom step temp 
+thermo_modify flush yes
+
+# Create dumpfile
+dump trjectory all custom ${Nfrdfe} dumpfile id x y z fx fy fz
+dump_modify trjectory format float %.16f pbc yes sort id delay 10000 
+
+run ${Nrun}
+
+undump trjectory
+quit
