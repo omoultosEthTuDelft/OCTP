@@ -1,0 +1,192 @@
+####################################################
+# EXAMPLE for using the OCTP plugin
+# Transport properties of an equimolar mixture of
+# water-methanol at 298 K and 1 atm. 
+#################### SETTING UP ####################
+units real
+dimension 3
+newton on
+boundary p p p
+atom_style full
+
+#################### VARIABLES ####################
+variable Temp equal 298       # Temperature in K
+variable Pres equal 1.0       # Pressure in atm.
+
+variable MolMass equal 25.028 # Average molar mass (kg/kmol)
+variable MolAtom equal 3      # Number of atoms in a molecule
+
+variable RandomSeed equal 44 # The random seed for velocity
+variable tstep equal 1.0      # 1fs 
+variable Ninptpre equal 10000 # Pre-initialize the NPT ensemble (very small timesteps)
+variable Ninpt equal 100000    # Initialize the NPT ensemble
+variable Npnpt equal 1000000  # Production in the NPT ensemble (volume)
+variable Ninvtpre equal 10000 # Pre-initialize the NVT ensemble (very small timesteps)
+variable Ninvt equal 50000    # Initialize the NVT ensemble
+variable Npnvt equal 10000000   # Production in the NVT ensemble (energy)
+variable Nrun equal 10000000  # production in the NVE ensemble
+variable Nf equal 100	      # Nfreq (fix ave/time and thermo)
+variable Ne equal  10         # Nevery (fix ave/time)
+variable Nr equal ${Nf}/${Ne} # Nrepeat (fix ave/time)
+variable NBR equal ${Npnpt}/25 # Block averaging for density (NPT)
+variable Nd equal ${Npnvt}/10 # Frequency of outputting positions of atoms in the NVT ensemble
+
+variable nb equal 10          # Number of blocks (fix ordern)
+variable nbe equal 25         # Number of block elements (fix ordern)
+variable Nvisc equal 5        # Nevery for viscosity (fix ordern: sample data at (Nvisc*2))
+variable Ncond equal 5        # Nevery for Tconductivity (fix ordern: sample data at (Ncond*2))
+variable Ndiff equal 1000     # Nevery for diffusivity (fix ordern: sample data at (Ndiff))
+variable Nwrit equal 100000   # Nwrite for transport properties (fix ordern: write every (Nwrit))
+
+variable Nrdfe equal 100      # Nevery for RDF (fix ave/time)
+variable Nrdfw equal 1000     # Nwrite for RDF (compute rdf/ext: write every (Nrdfw*Nrdfe))
+variable binnum equal 2000    # Number of bins for RDF
+
+#################### ATOM DEFINITION and FORCEFIELD ####################
+read_data ./data.lmp			# read the positions
+include forcefield.data			# read the force field
+
+#################### INITIALIZATION ####################
+# groups for the central atoms of water (O) and methanol (O)
+group wat type 1      # The Oxygen of WATER molecules
+group met type 4      # The Oxygen of METHANOL molecules
+
+# neigbor lists
+neighbor 2.0 bin
+neigh_modify every 1 delay 0 check yes
+
+# velocity-Verlet integrator
+run_style verlet
+
+# minimizing the system using the conjugate gradient method
+min_style cg
+min_modify dmax 0.05 
+minimize 1.0e-6 1.0e-6 1000 10000
+
+# initializing velocities
+velocity all create ${Temp} ${RandomSeed}  
+
+# rate of writing thermal properties to the log file
+thermo ${Nf}
+
+#################### 1) Initialize the NPT ensemble ####################
+# applying the shake algorithm for rigid molecules and the NPT solver
+fix constrain all shake 1.0e-6 1000 0 b 1 2 3 a 1
+fix integrate all npt temp ${Temp} 500 10.0 iso ${Pres} 100 100.0
+
+# Initializing the whole system with very small timesteps in the NPT ensemble
+timestep 0.001
+run ${Ninptpre} 
+timestep 0.01
+run ${Ninptpre} 
+timestep 0.1
+run ${Ninptpre} 
+timestep 0.2
+run ${Ninptpre} 
+timestep 0.5
+run ${Ninptpre} 
+reset_timestep 0
+
+# continuing the initialization with the final value of timestep
+unfix integrate
+fix integrate all npt temp 500 ${Temp} 100.0 iso 100 ${Pres} 1000.0
+
+timestep ${tstep}
+run ${Ninpt}
+
+unfix integrate
+fix integrate all npt temp ${Temp} ${Temp} 100.0 iso ${Pres} ${Pres} 1000.0
+run ${Ninpt}
+
+reset_timestep 0
+#################### 2) Obtaining average volume in NPT ######################
+# Getting the average volume of the system
+variable Volume equal vol
+fix VoluAve all ave/time 1 ${Npnpt} ${Npnpt} v_Volume file volume.dat
+
+# Getting the average density of the system (block averaging)
+variable Dens equal density
+fix DensAve all ave/time 1 ${NBR} ${NBR} v_Dens file density.dat
+
+run ${Npnpt}
+
+#################### 3) Initializing the NVT ensemble ####################
+# scaling the size of the system to the average volume
+variable sidesize equal (f_VoluAve^(1.0/3.0))    # get the volume
+variable xlow equal xlo
+variable ylow equal ylo
+variable zlow equal zlo
+variable xhig equal (xlo+${sidesize})
+variable yhig equal (ylo+${sidesize})
+variable zhig equal (zlo+${sidesize})
+change_box all x final ${xlow} ${xhig} y final ${ylow} ${yhig} z final ${zlow} ${zhig}
+unfix DensAve
+unfix VoluAve
+
+# changing the ensemble to NVT
+unfix integrate
+fix integrate all nvt temp ${Temp} ${Temp} 100.0
+
+# Initializing the whole system with very small timesteps in the NVT ensemble
+timestep 0.001
+run ${Ninvtpre} 
+timestep 0.01
+run ${Ninvtpre} 
+timestep 0.1
+run ${Ninvtpre} 
+timestep 0.2
+run ${Ninvtpre} 
+timestep 0.5
+run ${Ninvtpre} 
+reset_timestep 0
+
+# continuing the initialization with the final value of timestep
+timestep ${tstep}
+run ${Ninvt}
+reset_timestep 0
+
+#################### 4) Sampling data in NVT #####################
+# computing average total energy, pontential energy, temperature, and pressure over time
+variable TotEn equal etotal
+fix TEAve all ave/time ${Ne} ${Nr} ${Nf} v_TotEn file TotalE.dat
+
+variable PotEn equal pe
+fix PEAve all ave/time ${Ne} ${Nr} ${Nf} v_PotEn file PotenE.dat
+
+compute T all temp
+fix TempAve all ave/time ${Ne} ${Nr} ${Nf} c_T file temperature.dat
+
+compute P all pressure T
+fix PressAve all ave/time ${Ne} ${Nr} ${Nf} c_P file pressure.dat
+
+
+# computing self-diffusion and Onsager coefficients using the OCTP plugin
+compute positions all position
+fix f3 all ordern diffusivity ${Ndiff} ${Nwrit} c_positions nb ${nb} nbe ${nbe} file diffself.dat diffonsag.dat
+
+
+# computing shear and bulk viscosities  using the OCTP plugin
+fix f1 all ordern viscosity ${Nvisc} ${Nwrit} c_P nb ${nb} nbe ${nbe} file viscosity.dat
+
+
+# computing thermal conductivity using the OCTP plugin
+compute KE all ke/atom
+compute PE all pe/atom
+compute ST all stress/atom NULL virial
+compute heatflux all heat/flux KE PE ST
+fix f2 all ordern thermalconductivity ${Ncond} ${Nwrit} c_heatflux nb ${nb} nbe ${nbe} file tconductivity.dat
+
+
+# computing the RDF for all group pairs
+compute rdfs all rdf/ext Nbin ${binnum} Nwrite ${Nrdfw} file rdf.dat
+fix f4 all ave/time 1 1 ${Nrdfe} c_rdfs
+
+
+# Thermo style for outputing system properties to the log file
+thermo_style custom step temp f_TempAve press f_PressAve pe ke etotal
+thermo_modify flush yes
+
+#thermo 1
+run ${Nrun}
+
+quit
