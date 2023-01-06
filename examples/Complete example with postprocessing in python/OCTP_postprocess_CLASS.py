@@ -17,22 +17,22 @@ plt.close('all')
 class PP_OCTP:
     def __init__(self, folder, f_runs, groups, plotting=False):
         """
-        This class is used to postproces octp output files and will average the
-        results of multiple parallel runs if needed.
+        This class is used to postprocess octp output files and will average
+        the results of multiple parallel runs if needed.
 
         Parameters
         ----------
         folder : string
             General folder location where the output files are located.
         f_runs : array of strings
-            Intermediate folder level to separate multiple runs, like ['run_1',
-            'run_2', .., 'run_n']. The results over these runs will be averaged
-            and the standard deviations will be computed.
+            Intermediate folder level to separate multiple runs, such as
+            ['run_1', 'run_2', .., 'run_n']. The results over these runs will
+            be averaged and the standard deviations will be computed. Single
+            runs are also possible, however, no information on the std can be
+            retrieved from that.
         groups : array of strings
             The array holds the names of the groups as defined for OCTP. The
-            postprocessing is unsensitive of the order of these groups.
-        store : string
-            location where to store the output values of the postprocessing.
+            postprocessing is unsensitive to the order of these groups.
         plotting : boolean, optional
             State if plots of the ordern data should be shown. The default is
             False.
@@ -53,14 +53,15 @@ class PP_OCTP:
         self.groups = groups
 
         self.plotting = plotting
+
         # Preparing results dataframe
         self.results = pd.DataFrame()
         self.results['Legend'] = ['Mean', 'std', '# success']
 
-        # Tool to keep track if mandatory function is ran already
+        # Tool to keep track if mandatory function has already run.
         self.mandatory_ran = False
 
-        # Tool to keep consistend graph colloring
+        # Tool to keep consistent graph coloring
         self.cmap = plt.get_cmap("tab10")
 
     def filenames(self, Default=False, density=False, volume=False,
@@ -68,14 +69,15 @@ class PP_OCTP:
                   Diff_self=False, Diff_Onsag=False, viscosity=False,
                   T_conduc=False, rdf=False, log=False):
         """
-        This function sets the filenames of the output files. The default
-        filenames are set when the class is initiated, however single or all
-        filennames can be changed lateron
+        This function sets the file names of the output files that have to be
+        read. The default file names are set when the class is initiate.
+        However, single or all file names can be changed later with this
+        function.
 
         Parameters
         ----------
         Default : boolean, optional
-            sets the default filenames. The default is False.
+            sets all the file names to default. The default is False.
         density : string, optional
             Sets the name of the density file tracked during NPT initiation.
             The default is "density.dat".
@@ -161,7 +163,7 @@ class PP_OCTP:
         if log is not False:
             self.f_log = '/' + log
 
-    def changefit(self, margin=0.1, Minc=15, Mmax=60, er_max=0.05):
+    def changefit(self, margin=0.1, Minc=15, Mmax=40, er_max=0.05):
         """
         The changefit function adjusts the fitting parameters in the
         diff_calculator function (which computes the transport properties from
@@ -174,14 +176,14 @@ class PP_OCTP:
             avoids fitting in the balistic regime and in statistically relevant
             parts. The default is 0.1.
         Minc : integer, optional
-            The minimum ammount of points that shall be included in a fit. The
+            The minimum number of points that shall be included in a fit. The
             default is 15.
         Mmax : integer, optional
-            The maximum ammount of points that shall be investigated for
-            fitting. The default is 60.
+            The maximum number of points that shall be investigated for
+            fitting. The default is 40.
         er_max : float, optional
             The maximum deviation of a slope of 1 in the log-log space. If this
-            is set too tight, the fitting might return nan. The default is
+            is set too tight, the fitting might return NaN. The default is
             0.05.
 
         Returns
@@ -197,14 +199,14 @@ class PP_OCTP:
     def check_succesfull(self, T_min):
         """
         This function removes the uncompleted (statistically untrustworthy)
-        runs from the list of parallel runs. This funcion checks succesfull
+        runs from the list of parallel runs. This funcion checks succesful
         runtime with the temperature file, so make sure to set that file name
         correctly before calling this function.
 
         Parameters
         ----------
         T_min : float or integer
-            Minimum succesfull runtime of production phase in ns.
+            Minimum succesful runtime of production phase in ns.
 
         Returns
         -------
@@ -221,7 +223,7 @@ class PP_OCTP:
         print(len(f_run), 'statistically succesful runs for', self.f_folder)
         self.f_runs = f_run
 
-        # Set the runfile list again with now only succesfull runs.
+        # Set the runfile list again with only succesful runs.
         self.f_file = [None]*len(self.f_runs)
         for i in range(len(self.f_runs)):
             self.f_file[i] = self.f_folder + self.f_runs[i]
@@ -242,7 +244,7 @@ class PP_OCTP:
 
         Before this function is called, the filenames have to be set correctly.
         As this function is mandatory, it will automatically run before any
-        non-Mandatory function is called for, exempting when the mandatory
+        non-Mandatory function is called, exempting when the mandatory
         properties are already determined.
 
         Returns
@@ -250,8 +252,8 @@ class PP_OCTP:
         None.
 
         """
-        # VOLUME SECTION
-        # Here the volume and box size is computed and stored
+        # VOLUME and BOXSIZE SECTION
+        # Here the volume and box size are computed and stored.
         V = np.zeros(len(self.f_file))
         for i in range(len(self.f_file)):
             V[i] = np.array(pd.read_table(self.f_file[i]+self.f_V,
@@ -259,16 +261,16 @@ class PP_OCTP:
                                           skiprows=2))[:, 1]*1e-30
         L = np.power(V, 1/3)
 
-        # Storing the results to be available per run in class
+        # Storing the results to be available per run in class.
         self.V = V
         self.L = L
 
-        # Storing the results in dataframe
+        # Storing the results in dataframe.
         self.results['Volume/[m^3]'] = self.repacking_results(V)
         self.results['Box size/[m]'] = self.repacking_results(L)
 
         # TEMPERATURE SECTION
-        # Here the temperature is computed and stored
+        # Here the temperature is computed and stored.
         T_l = [None]*len(self.f_file)
         T = np.zeros(len(self.f_file))
         for i in range(len(self.f_file)):
@@ -278,10 +280,10 @@ class PP_OCTP:
             T_l[i] = unc.ufloat(np.mean(T_i), np.std(T_i))
             T[i] = np.mean(T_i)
 
-        # Storing the results to be available per run in class
+        # Storing the results to be available per run in class.
         self.T = T
 
-        # Storing the results in dataframe
+        # Storing the results in dataframe.
         T_ave, T_sig = np.mean(T_l).n, np.mean(T_l).s
         T = [T_ave, T_sig, len(self.f_file)]
         self.results['Temperature/[K]'] = T
@@ -289,7 +291,7 @@ class PP_OCTP:
         # NUMBER OF PARTICLES PER GROUP SECTION
         # Here we will retrieve the number of particles per group from the log
         # file of lammps. This number is assumed to be constant for all
-        # possible parallel runs.
+        # parallel runs.
         N_per_group = np.zeros(len(self.groups))
         for i in range(len(self.groups)):
             with open(self.f_file[0]+self.f_log) as fp:
@@ -299,11 +301,11 @@ class PP_OCTP:
                 words = fp.readline(l_no + 1).split()
                 N_per_group[i] = int(words[0])
 
-        # Store the result to be available in code
+        # Store the result to be available in code.
         self.N_per_group = N_per_group
         self.N_tot = np.sum(N_per_group)
 
-        # Store the results in dataframe
+        # Store the results in dataframe.
         for i in range(len(self.groups)):
             self.results['Number of ' + self.groups[i]] = [N_per_group[i], 0,
                                                            len(self.f_file)]
@@ -322,7 +324,7 @@ class PP_OCTP:
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -334,7 +336,7 @@ class PP_OCTP:
                                          skiprows=2))[:, 1]
             p_l[i] = unc.ufloat(np.mean(p_i)*co.atm, np.std(p_i)*co.atm)
 
-        # computing total mean and handling uncertainty correctly
+        # Computing total mean and handling uncertainties correctly.
         p_ave, p_sig = np.mean(p_l).n, np.mean(p_l).s
         self.results['pressure/[Pa]'] = [p_ave, p_sig, len(self.f_file)]
 
@@ -342,16 +344,16 @@ class PP_OCTP:
         """
         OPTIONAL FUNCTION. The density is optional and will not be reused.
         This function computes the density per simulation, based on an average
-        from a NPT ensemble. As a check, the density could be compared with the
-        total mass and volume of the final ensemble. The unit of the density
-        computed is kg/m^3.
+        from an NPT ensemble. As a check, the density could be compared with
+        the total mass and volume of the final ensemble. The unit of the
+        density computed is kg/m^3.
 
         Returns
         -------
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -361,14 +363,14 @@ class PP_OCTP:
                                            delimiter=' ', header=None,
                                            skiprows=2))[:, 1]
             rho[i] = np.mean(rho_i)*1000
-        # Storing the result in the dataframe
+        # Storing the result in the dataframe.
         rho = [np.mean(rho), np.std(rho), len(self.f_file)]
         self.results['density/[kg/m^3]'] = rho
 
     def molarity(self, group):
         """
         OPTIONAL FUNCTION. This function computes the molarity of a specific
-        group in a mixture, depending on group name. This is provided in
+        group in a mixture, depending on group name. The result is presented in
         mol/l_solution.
 
         Parameters
@@ -381,7 +383,7 @@ class PP_OCTP:
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -389,22 +391,22 @@ class PP_OCTP:
         N = self.N_per_group[i]  # Getting number of particles in group
         M = (N/co.N_A)/(self.V*1000)
 
-        # Storing the results in dataframe
+        # Storing the results in dataframe.
         self.results['molarity/[mol/l]'] = [np.mean(M), np.std(M),
                                             len(self.f_file)]
 
     def molality(self, group, group_solvent, u_solvent):
         """
-        OPTIONAL FUNTION. This function computes the molarity of a specific
-        group in a mixture depending on the group and solvent name. The unit
+        OPTIONAL FUNTION. This function computes the molality of a solute in a
+        solvent depending on the group and group_solvent name. The unit
         is mol/kg_solvent.
 
         Parameters
         ----------
         group : string
-            The name of the group of identifies solute.
+            The name of the group of which identifies solute.
         group_solven : string
-            The name of the group which indentifies the solvent.
+            The name of the group which identifies the solvent.
         u_solvent : float
             The molecular weight of of the solvent in g/mol.
 
@@ -413,7 +415,7 @@ class PP_OCTP:
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -425,7 +427,7 @@ class PP_OCTP:
 
         m = N/(N_solv*(u_solvent/1000))  # in mol/kg_solvent
 
-        # Storing the result in dataframe
+        # Storing the result in dataframe.
         self.results['molality/[mol/kg]'] = [m, 0, len(self.f_file)]
 
     def viscosity(self):
@@ -439,7 +441,7 @@ class PP_OCTP:
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -456,7 +458,7 @@ class PP_OCTP:
             msd_all = np.array(data['MSD_all'])
             D, t_fit, fit = self.diff_calculator(t, msd_all)
             visc[i] = D*fact
-            # Plot if asked for
+            # Plot if asked for.
             if self.plotting is True:
                 plt.figure('viscosity shear')
                 plt.loglog(t, np.abs(msd_all)*fact, marker=".",
@@ -467,7 +469,7 @@ class PP_OCTP:
             msd_bulk = np.array(data['MSD_bulkvisc'])
             D, t_fit, fit = self.diff_calculator(t, msd_bulk)
             visc_bulk[i] = D*fact
-            # Plot if asked for
+            # Plot if asked for.
             if self.plotting is True:
                 plt.figure('viscosity bulk')
                 plt.loglog(t, np.abs(msd_bulk)*fact, marker=".",
@@ -488,10 +490,10 @@ class PP_OCTP:
             plt.ylabel('MSD pressure fluctuations/(Pa*s*fs)')
             plt.xlabel('time in fs')
             plt.legend()
-        # Storing the results to be availlable per run in class
+        # Storing the results to be available per run in class.
         self.visc = visc
 
-        # Storing results in dataframe. If nan is fit output, it is ignored
+        # Storing results in dataframe. If NaN is fit output, it is ignored.
         visc = self.repacking_results(visc)
         self.results['viscosity shear/[Pa*s]'] = visc
         visc_bulk = self.repacking_results(visc_bulk)
@@ -507,7 +509,7 @@ class PP_OCTP:
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -524,14 +526,14 @@ class PP_OCTP:
             D, t_fitb, fitb = self.diff_calculator(t, msd_all)
             T_conb[i] = D*fact
 
-            # Plotting if asked for
+            # Plotting if asked for.
             if self.plotting is True:
                 plt.figure('thermal conductivity')
                 plt.loglog(t, np.abs(msd_all)*fact, marker=".",
                            label=self.f_runs[i], color=self.cmap(i))
                 plt.loglog(t_fit, fit*fact, ':', color=self.cmap(i))
 
-        # Plotting if asked for
+        # Plotting if asked for.
         if self.plotting is True:
             plt.figure('thermal conductivity')
             plt.title('thermal conductivity')
@@ -540,7 +542,7 @@ class PP_OCTP:
             plt.xlabel('time in fs')
             plt.legend()
 
-        # Storing the results in dataframe
+        # Storing the results in dataframe.
         T_con = self.repacking_results(T_con)
         self.results['Thermal conductivity/[W/(m*K)]'] = T_con
 
@@ -554,24 +556,25 @@ class PP_OCTP:
         YH_correction : Boolean, optional
             Turns on the system size corrections by using the method proposed
             by Yeh and Hummer. For this correction, the viscosity has to be
-            determined also. The default is False, True enables the correction.
+            determined as well. The default is False. True enables the
+            correction.
 
         box_size_check : Boolean, optional
             Turns on the comparison between the box size and the length scales
-            of the selected fits. If the lengthscales are smaller than the box
-            size, a warning is raise, however the computations continue.
+            of the selected fits. If the length scales are smaller than the box
+            size, a warning is raised, however, the computations continue.
         Returns
         -------
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
         D_YH = [0]*len(self.f_file)
         if YH_correction is True:
-            # run viscosity if that has not occured yet
+            # Run viscosity if that has not occured yet.
             try:
                 visc = self.visc
             except AttributeError:
@@ -602,14 +605,14 @@ class PP_OCTP:
                 D_s[i] = D*fact
                 D_s[i] += D_YH[i]  # adds 0 if no correction is needed
 
-                # Plotting if asked for
+                # Plotting if asked for.
                 if self.plotting is True:
                     plt.figure('D_self '+self.groups[j])
                     plt.loglog(t, selfdif*fact, marker=".",
                                label=self.f_runs[i], color=self.cmap(i))
                     plt.loglog(t_fit, fit*fact, ':', color=self.cmap(i))
 
-            # Plotting if asked for
+            # Plotting if asked for.
             if self.plotting is True:
                 plt.figure('D_self ' + self.groups[j])
                 plt.grid('on')
@@ -618,7 +621,7 @@ class PP_OCTP:
                 plt.xlabel('time in fs')
                 plt.legend()
 
-            # Storing self diffusion to dataframe
+            # Storing self-diffusion to dataframe.
             words = 'Self Diffusion ' + self.groups[j] + '/[m^2/s]'
             D_self = self.repacking_results(D_s)
             self.results[words] = D_self
@@ -632,15 +635,15 @@ class PP_OCTP:
         ----------
         box_size_check : Boolean, optional
             Turns on the comparison between the box size and the length scales
-            of the selected fits. If the lengthscales are smaller than the box
-            size, a warning is raise, however the computations continue.
+            of the selected fits. If the length scales are smaller than the box
+            size, a warning is raised, however, the computations continue.
 
         Returns
         -------
         None.
 
         """
-        # run mandatory properties run if that has not occured yet
+        # Run mandatory properties run if that has not occured yet.
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
@@ -651,6 +654,7 @@ class PP_OCTP:
         for i in range(len(self.groups)):
             for j in range(len(self.groups)-i):
                 D_O = np.zeros(len(self.f_file))
+
                 for k in range(len(self.f_file)):
                     # i indexes first species
                     # j indexes second species (i+j)
@@ -674,7 +678,7 @@ class PP_OCTP:
                     D, t_fit, fit = self.diff_calculator(t, diff, m=length)
                     D_O[k] = D*fact
 
-                    # Plotting if asked for
+                    # Plotting if asked for.
                     if self.plotting is True:
                         plt.figure('D_Onsag '+self.groups[i] + ' ' +
                                    self.groups[j+i])
@@ -682,7 +686,7 @@ class PP_OCTP:
                                    label=self.f_runs[k], color=self.cmap(k))
                         plt.loglog(t_fit, fit*fact, ':', color=self.cmap(k))
 
-                # Plotting if asked for
+                # Plotting if asked for.
                 if self.plotting is True:
                     plt.figure('D_Onsag '+self.groups[i] + ' ' +
                                self.groups[j+i])
@@ -694,7 +698,7 @@ class PP_OCTP:
                     plt.xlabel('time in fs')
                     plt.legend()
 
-                # Storing onsager coefficients to dataframe
+                # Storing Onsager coefficients to dataframe.
                 words = 'Onsager '+self.groups[i]+self.groups[j+i]+'/[m^2/s]'
                 D_O = self.repacking_results(D_O)
                 self.results[words] = D_O
@@ -702,7 +706,7 @@ class PP_OCTP:
     def store(self, location=False, name='postprocessed.csv'):
         """
         OPTIONAL FUNCTION: this function stores the dataframe in the
-        intended location and under the itended name
+        intended location and under the provided name.
 
         Parameters
         ----------
@@ -710,7 +714,7 @@ class PP_OCTP:
             Path to the file location where the dataframe should be stored. The
             default is self.f_folder (set automatically by using False).
         name : string, optional
-            The intended filename. The default is 'postprocessed.csv'.
+            The intended file name. The default is 'postprocessed.csv'.
 
         Returns
         -------
@@ -724,8 +728,8 @@ class PP_OCTP:
     def diff_calculator(self, t, MSD_in, m=False):
         """
         This function executes the fitting to a slope of 1 in the log-log
-        domain. It tries all possible begin and start points for the fit and
-        returns the fit whith a slope closest to 1. If no such fit can be
+        domain. It tries all possible begin and end points for the fit and
+        returns the fit with a slope closest to 1. If no such fit can be
         found, NaN is returned for the transport property.
 
         Parameters
@@ -744,8 +748,8 @@ class PP_OCTP:
         -------
         D : float
             The value of the transport property which can be computed using the
-            OCTP output data. This value is not yet corrected to the correct
-            units.
+            OCTP output data. This value is not yet corrected for the correct
+            units and it will return NaN if the fitting is unsuccesfull.
         t_fit : array of floats
             The timepoints belonging to the fit. This can then be visualised
             when the individual runs are plotted.
@@ -753,17 +757,16 @@ class PP_OCTP:
             The fit, to be visualised with the timepoints of the fit.
 
         """
-        # Settings for the margins and fit method
+        # Settings for the margins and fit method.
         margin = self.margin  # cut away range at left and right side
-        Minc = self.Minc  # minimum amount of points included in the fit
-        Mmax = self.Mmax  # maximum ammount of points included in the fit
+        Minc = self.Minc  # minimum number of points included in the fit
+        Mmax = self.Mmax  # maximum number of points included in the fit
         er_max = self.er_max  # maximum allowed error
 
         t_log = np.log10(t)
         MSD_log_in = np.log10(np.abs(MSD_in))
         ibest = 'failed'
         jbest = 'failed'
-        rebest = 'failed'
         mbest = 0
 
         for i in range(int(margin*len(t_log)), int((1-margin)*len(t_log))-Minc):
@@ -778,7 +781,7 @@ class PP_OCTP:
                         jbest = j
                         ibest = i
 
-        # Make sure to return nan (not included in np.nanmean() for averaging)
+        # Make sure to return NaN (not included in np.nanmean() for averaging).
         if ibest == 'failed':
             D = np.nan
             t_fit = t[0]
@@ -788,7 +791,7 @@ class PP_OCTP:
             D, b = np.polyfit(t[ibest:ibest+jbest],
                               MSD_in[ibest:ibest+jbest], 1)
 
-            # Test box size to displacement comparison
+            # Test box size to displacement comparison.
             if np.abs(MSD_in[ibest+jbest]-MSD_in[ibest]) < m**2 and type(m) is not bool:
                 print('MSD fit is smaller than simulation box',
                       MSD_in[ibest+jbest]-MSD_in[ibest], 'versus', m**2)
@@ -801,7 +804,7 @@ class PP_OCTP:
         """
         This function repacks the outputs of multiple runs. If a list with
         fitted transport properties is inputted, it will output the mean value,
-        its standard deviation and the number of non-nan type inputs. The
+        its standard deviation and the number of non-NaN type inputs. The
         output is packaged in such a way that it can be included in the results
         database immediatly.
 
@@ -809,12 +812,12 @@ class PP_OCTP:
         ----------
         D_array : array of floats
             A set of transport properties, for example the D_self of 5
-            equivalent runs which have to be treated statistically.
+            equivalent runs, which have to be treated statistically.
 
         Returns
         -------
         list
-            The returned list contains the mean, std and number of non-nan type
+            The returned list contains the mean, std and number of non-NaN type
             items in the inputted D_array.
 
         """
@@ -828,7 +831,7 @@ def read(datafile: str, export: str) -> pd.DataFrame:
     """
     This function reads the OCTP output files and reshapes it in a way that
     pandas can read the data effectively. The use of a temporary file is
-    choosen as to not permanently eddid the OCTP output files for other uses.
+    chosen as to not permanently edit the OCTP output files for other uses.
 
     Parameters
     ----------
@@ -840,7 +843,7 @@ def read(datafile: str, export: str) -> pd.DataFrame:
     Returns
     -------
     df : dataframe
-        A pandas dataframe which makes it possible to acces the correct OCTP
+        A pandas dataframe which makes it possible to access the correct OCTP
         data needed for fitting.
 
     """
