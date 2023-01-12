@@ -58,7 +58,7 @@ octp.molarity('met')  # Compute the molarity of methanol in water
 octp.molality('met', 'wat', 18.01528)  # Compute molality of methanol in water
 octp.viscosity()  # Compute the viscosity
 octp.thermal_conductivity()  # Compute the thermal conductivity
-octp.self_diffusivity(YH_correction=True)
+octp.self_diffusivity(YH_correction=True, box_size_check=True)
 octp.onsager_coeff()  # Compute Onsager Coefficients
 
 """

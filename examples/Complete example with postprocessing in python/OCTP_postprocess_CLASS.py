@@ -340,13 +340,22 @@ class PP_OCTP:
         p_ave, p_sig = np.mean(p_l).n, np.mean(p_l).s
         self.results['pressure/[Pa]'] = [p_ave, p_sig, len(self.f_file)]
 
-    def density(self):
+    def density(self, unit_conversion=1000):
         """
         OPTIONAL FUNCTION. The density is optional and will not be reused.
         This function computes the density per simulation, based on an average
         from an NPT ensemble. As a check, the density could be compared with
-        the total mass and volume of the final ensemble. The unit of the
+        the total mass and volume of the final ensemble. Be carefull that the
+        lammps output can vary depending on the lammps units settings or the
+        method in which the density is computed. Adjusting the unit can be done
+        bu using the unit_conversion function. The unit of the
         density computed is kg/m^3.
+
+        Parameters
+        ----------
+        unit_conversion : integer or float, optional
+            The conversion from the units in the densty log file to kg/m^3. The
+            default is 1000 as lammps uses g/cm^3 by default real units.
 
         Returns
         -------
@@ -357,12 +366,13 @@ class PP_OCTP:
         if self.mandatory_ran is False:
             self.mandatory_properties()
 
+        fact = unit_conversion
         rho = [None]*len(self.f_file)
         for i in range(len(self.f_file)):
             rho_i = np.array(pd.read_table(self.f_file[i]+self.f_D,
                                            delimiter=' ', header=None,
                                            skiprows=2))[:, 1]
-            rho[i] = np.mean(rho_i)*1000
+            rho[i] = np.mean(rho_i)*fact
         # Storing the result in the dataframe.
         rho = [np.mean(rho), np.std(rho), len(self.f_file)]
         self.results['density/[kg/m^3]'] = rho
