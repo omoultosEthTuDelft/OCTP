@@ -1,0 +1,96 @@
+\documentclass{article-Bram}
+\usepackage{tablefootnote}
+\renewcommand{\thesubsection}{\thesection.\alph{subsection}}
+
+
+% To create a folder tree diagram
+\usepackage[edges]{forest}
+\definecolor{foldercolor}{RGB}{124,166,198}
+
+\title{OCTP 2.0 guidelines and proposal}
+\subtitle{}
+\author{Vladimir Jelle Lagerweij\thanks{Corresponding author. e-mail: \href{mailto:v.j.lagerweij@student.tudelft.nl}{v.j.lagerweij@student.tudelft.nl}}}
+
+\institute{Delft University of Technology}
+
+
+\begin{document}
+\maketitle
+This document holds the derivations for the discretized equations of the Deoxer. First the overall continuous differential equation is derived, after which 3 different discretization schemes are proposed.\\
+Jelle Lagerweij
+\section{Nomenclature}
+For this assessment of a deoxer, the following characteristics are used:
+
+%\begin{table}[ht!]
+%\frac{	\centering
+%	\small
+%	\begin{tabular}{|l|ll|}
+%		\hline
+%		Sign & Unit & Description     \\ \hline
+%		\hline
+%	\end{tabular}
+%	\caption{Nomenclature table}
+%	\label{tab:my-table}
+%\end{table}}{den}
+
+\section{Goals for the input parameters}
+currently, the ordern diffusion has to have the following input:
+
+\begin{listing}[ht!]
+	\centering
+	\begin{minted}{bash}
+compute c_ID all position  # computing the positions of all atoms and send them to master cpu.
+fix ID group-ID ordern diffusivity Nevery Nfreq c_ID keyword values ...  # executes ordern algorithm
+	\end{minted}
+	\caption{The basic lammps command parameters of current fix\_ordern code with diffusivity mode selected.}
+	\label{current input}
+\end{listing}
+
+For the diffusion coefficient, the value parameter has to refer to a compute position compute (part of OCTP plug-in code). However this should be replaced by a chunk compute (already part of basic Lammps code). Additionally, there should be more than one \mintinline{bash}{c_ID} input allowed. For diffusion it should get the following workflow.
+
+\begin{listing}[ht!]
+	\centering
+	\begin{minted}{bash}
+compute c_ID1 group-ID1 chunk/atom molecule nchunk once ids once  # computing which atoms are in molecule group-ID 1
+compute c_ID2 group-ID2 chunk/atom molecule nchunk once ids once  # computing which atoms are in molecule group-ID 2
+...
+compute c_IDn group-IDn chunk/atom molecule nchunk once ids once  # computing which atoms are in molecule group-ID n
+
+fix ID group-ID ordern diffusivity Nevery Nfreq c_ID1 c_ID2 ... c_IDn keyword values ...  # executes ordern algorithm
+	\end{minted}
+	\caption{Final input goal for the improved OCTP plug-in. n different chunk types shall be allowed as input, for which then the sell diffusivity and Onsager coefficients shall be computed. The \mintinline{bash}{nchunk once ids once} makes sure that the chunks compute will only assign atoms to certain chunks once and not change their designation for consistency.}
+	\label{intended input}
+\end{listing}
+
+\section{Algorithm goals}
+If every chunk type gets a list with only their centre of masses, the mask style implementation with groups of the current algorithm can be removed as well. This should then result in the following work flow.
+
+\todo[inline]{Hand drawing for now --> first current work flow}
+
+\todo[inline]{Hand drawing for now --> then future work flow}
+
+\clearpage
+\section{Important variables and how to fetch them}
+\small
+\begin{longtable}{|l|m{2cm}m{5cm}|l|m{1.1cm} m{5cm}|} 
+	\hline
+	\textbf{Name} & \textbf{How it is retrieved} & \textbf{Meaning} & \textbf{also in .h} & \textbf{Change needed} & \textbf{How improvement is retrieved} \\ \hline
+	\mintinline{cpp}{mode}& input arg 3 \mintinline{cpp}{arg[3]}& If ordern computes viscosity, T-conductivity or diffusivity & yes & no &  \\ \hline
+	\mintinline{cpp}{idcompute}& input arg 6  \mintinline{cpp}{arg[6]}& the compute for which the ordern algorithm asks. & no & yes & should be multiple idcomputes possible: ¿¿¿how??? \\ \hline
+	\mintinline{cpp}{icompute}& \mintinline{cpp}{=modify->find_co} \mintinline{cpp}{mpute(idcompute)} & real (lammps understanding) id of compute function & yes & yes & should be multiple icompute possible \\ \hline
+	\mintinline{cpp}{nrows}& \mintinline{cpp}{=modify->compute} \mintinline{cpp}{[icompute]->size} \mintinline{cpp}{_vector} & unclear yet (size of data passed from compute?) & yes & ? & ? \\ \hline
+	\mintinline{cpp}{count}& self made variable & number of samples taken, it just adds 1 & yes & no &  \\ \hline
+	\mintinline{cpp}{tngroup}& \mintinline{cpp}{=group->ngroup} & total number of groups & yes & yes & Shall be retrieved from number of computes in input. (=number of chunk types used.)\\ \hline
+	\mintinline{cpp}{ngroup}& self made variable & increases per indexed group & yes & yes & Can probably be removed if group numbering comes from chunk type. \\ \hline
+	\mintinline{cpp}{tnatom}& \mintinline{cpp}{=atom_>natoms} & total number of atoms & yes & yes & should be total number of chunks (full total, or total per chunk type).  If \mintinline{cpp}{cchunk} refers to an existing chunk type, then \mintinline{cpp}{cchunk->setup_chunk()} might work. \\ \hline
+	\mintinline{cpp}{*cvector}& \mintinline{cpp}{double *cvector=} \mintinline{cpp}{ccompute->vector} &  vector out compute (unclear to me why the \mintinline{cpp}{double} is needed) & no & yes & We (again) need to be able to read multiple chunk types \\ \hline
+	\caption{The current names of the variables and how they can be retrieved are displayed in this table. Additionally, comments are made for when they need to be changed for OCTP 2.0.}
+	\label{tab:variables}
+\end{longtable}
+\normalsize
+
+\section{Questions}
+\begin{enumerate}
+	\item Why is the for loops in the real ordern calculation \mintinline{cpp}{cor( k=1; k<=ngroup; k++)} with \mintinline{cpp}{ngroup} instead of the total amount of groups: \mintinline{cpp}{tngroup}?
+\end{enumerate}
+\end{document}
