@@ -12,6 +12,7 @@ import scipy.constants as co
 import uncertainties as unc
 import matplotlib.pyplot as plt
 plt.close('all')
+plt.rcParams['svg.fonttype'] = 'none'
 
 
 class PP_OCTP:
@@ -46,13 +47,17 @@ class PP_OCTP:
         self.f_runs = f_runs
         self.f_file = [None]*len(self.f_runs)
         for i in range(len(self.f_runs)):
-            self.f_file[i] = self.f_folder + self.f_runs[i]
+            self.f_file[i] = self.f_folder + '/' + self.f_runs[i]
 
         self.filenames(Default=True)
         self.changefit()
         self.groups = groups
 
         self.plotting = plotting
+        if self.plotting is True:
+            plt.close('all')
+            plt.rcParams['svg.fonttype'] = 'none'
+
 
         # Preparing results dataframe
         self.results = pd.DataFrame()
@@ -215,7 +220,7 @@ class PP_OCTP:
         """
         f_run = []
         for i in range(len(self.f_runs)):
-            t = np.array(pd.read_table(self.f_folder + self.f_runs[i]+self.f_T,
+            t = np.array(pd.read_table(self.f_file[i]+self.f_T,
                                        delimiter=' ', header=None,
                                        skiprows=2))[:, 0]
             if t[-1] > T_min*1e6:
@@ -226,7 +231,7 @@ class PP_OCTP:
         # Set the runfile list again with only succesful runs.
         self.f_file = [None]*len(self.f_runs)
         for i in range(len(self.f_runs)):
-            self.f_file[i] = self.f_folder + self.f_runs[i]
+            self.f_file[i] = self.f_folder + '/' + self.f_runs[i]
 
     def mandatory_properties(self):
         """
@@ -338,7 +343,7 @@ class PP_OCTP:
 
         # Computing total mean and handling uncertainties correctly.
         p_ave, p_sig = np.mean(p_l).n, np.mean(p_l).s
-        self.results['pressure/[Pa]'] = [p_ave, p_sig, len(self.f_file)]
+        self.results['Pressure/[Pa]'] = [p_ave, p_sig, len(self.f_file)]
 
     def density(self, unit_conversion=1000):
         """
@@ -375,7 +380,7 @@ class PP_OCTP:
             rho[i] = np.mean(rho_i)*fact
         # Storing the result in the dataframe.
         rho = [np.mean(rho), np.std(rho), len(self.f_file)]
-        self.results['density/[kg/m^3]'] = rho
+        self.results['Density/[kg/m^3]'] = rho
 
     def molarity(self, group):
         """
@@ -402,7 +407,7 @@ class PP_OCTP:
         M = (N/co.N_A)/(self.V*1000)
 
         # Storing the results in dataframe.
-        self.results['molarity/[mol/l]'] = [np.mean(M), np.std(M),
+        self.results['Molarity/[mol/l]'] = [np.mean(M), np.std(M),
                                             len(self.f_file)]
 
     def molality(self, group, group_solvent, u_solvent):
@@ -438,7 +443,7 @@ class PP_OCTP:
         m = N/(N_solv*(u_solvent/1000))  # in mol/kg_solvent
 
         # Storing the result in dataframe.
-        self.results['molality/[mol/kg]'] = [m, 0, len(self.f_file)]
+        self.results['Molality/[mol/kg]'] = [m, 0, len(self.f_file)]
 
     def viscosity(self):
         """
@@ -505,9 +510,9 @@ class PP_OCTP:
 
         # Storing results in dataframe. If NaN is fit output, it is ignored.
         visc = self.repacking_results(visc)
-        self.results['viscosity shear/[Pa*s]'] = visc
+        self.results['Viscosity shear/[Pa*s]'] = visc
         visc_bulk = self.repacking_results(visc_bulk)
-        self.results['viscosity bulk/[Pa*s]'] = visc_bulk
+        self.results['Viscosity bulk/[Pa*s]'] = visc_bulk
 
     def thermal_conductivity(self):
         """
@@ -632,7 +637,10 @@ class PP_OCTP:
                 plt.legend()
 
             # Storing self-diffusion to dataframe.
-            words = 'Self Diffusion ' + self.groups[j] + '/[m^2/s]'
+            if YH_correction is True:
+                words = 'Self diffusivity YH_cor ' + self.groups[j] + '/[m^2/s]'
+            else:
+                words = 'Self diffusivity ' + self.groups[j] + '/[m^2/s]'
             D_self = self.repacking_results(D_s)
             self.results[words] = D_self
 
