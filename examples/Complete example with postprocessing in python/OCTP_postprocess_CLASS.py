@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+s# -*- coding: utf-8 -*-
 """
 Created on Mon Nov 14 10:17:18 2022
 
@@ -100,16 +100,16 @@ class PP_OCTP:
             production. The default is "pressure.dat".
         Diff_self : string, optional
             Sets the name of the OCTP self diffusion output file. The default
-            is "diffself.dat".
+            is "selfdiffusivity.dat".
         Diff_Onsag : string, optional
             Sets the name of the OCTP Onsager coefficient output file. The
-            default is "diffonsag.dat".
+            default is "onsagercoefficient.dat".
         viscosity : string, optional
             Sets the name of the OCTP viscosity output file. The default is
             "viscosity.dat".
         T_conduc : string, optional
             Sets the name of the OCTP thermal conduction output file. The
-            default is "tconductivity.dat".
+            default is "thermconductivity.dat".
         rdf : string, optional
             Sets the name of the OCTP rdf output file. The default is
             "rdf.dat".
@@ -128,10 +128,10 @@ class PP_OCTP:
             self.f_totE = '/TotalE.dat'  # Total energy in kcal
             self.f_T = '/temperature.dat'  # Temperature in K
             self.f_p = '/pressure.dat'  # Pressure in atm
-            self.f_Ds = '/diffself.dat'
-            self.f_DO = '/diffonsag.dat'
+            self.f_Ds = '/selfdiffusivity.dat'
+            self.f_DO = '/onsagercoefficient.dat'
             self.f_visc = '/viscosity.dat'
-            self.f_conT = '/tconductivity.dat'
+            self.f_conT = '/thermconductivity.dat'
             self.f_rdf = '/rdf.dat'
             self.f_log = '/log.lammps'
 
