@@ -1,0 +1,141 @@
+####################################################
+# EXAMPLE for using the OCTP plugin
+# Transport properties of LJ
+#  at 298 K in NVT (density 50 mol/L)
+#################### SETTING UP ####################
+units real
+dimension 3
+newton off
+boundary p p p
+atom_style full
+
+#################### VARIABLES ####################
+variable Temp equal 100      # Temperature in K
+
+
+variable RandomSeed equal 100 # The random seed for velocity
+variable tstep equal 1.0      # 1fs 
+
+variable Ninvt equal 50000    # Initialize the NVT ensemble
+variable Nrun equal 100000    # Production in the NVT ensemble (energy)
+
+variable Nf equal 1000       # Nfreq (fix ave/time and thermo)
+variable Ne equal  10         # Nevery (fix ave/time)
+variable Nr equal ${Nf}/${Ne} # Nrepeat (fix ave/time)
+variable Nd equal ${Nrun}/10 # Frequency of outputting positions of atoms in the NVT ensemble
+
+variable nb equal 10          # Number of blocks (fix ordern)
+variable nbe equal 20         # Number of block elements (fix ordern)
+variable Nvisc equal 5        # Nevery for viscosity (fix ordern: sample data at (Nvisc*2))
+variable Ndiff equal 1000     # Nevery for diffusivity (fix ordern: sample data at (Ndiff))
+variable Nwrit equal 100000   # Nwrite for transport properties (fix ordern: write every (Nwrit))
+
+variable Nrdfe equal 100      # Nevery for RDF (fix ave/time)
+variable Nrdfw equal 1000     # Nwrite for RDF (compute rdf/ext: write every (Nrdfw*Nrdfe))
+variable binnum equal 2000    # Number of bins for RDF
+
+#################### ATOM DEFINITION and FORCEFIELD ####################
+read_data ./input_used/data.lmp                     # read the positions
+include ./input_used/forcefield.data                # read the force field
+
+
+replicate 10 10 10
+
+#################### INITIALIZATION ####################
+# groups for the central atoms of water (O)
+group LJ type 1      # The Oxygen of WATER molecules
+
+# neigbor lists
+neighbor 2.0 bin
+neigh_modify every 1 delay 0 check yes
+
+# velocity-Verlet integrator
+run_style verlet
+
+# initializing velocities
+velocity all create ${Temp} ${RandomSeed}  
+
+# rate of writing thermal properties to the log file
+thermo ${Nf}
+
+# run in  NVT
+fix integrate all nvt temp ${Temp} ${Temp} 300.0
+
+variable Nfrdfe equal 100      # Nevery for FRDF (fix ave/time)
+variable Nfrdfr equal (${Nrun}-1000)/${Nfrdfe}    # Number of samples in frdf average
+variable Nfrdff equal ${Nrun}
+
+# run in NPT
+#fix integrate all npt temp 100 100 100 iso 300 300 300
+
+# initialize the system in NVT
+timestep ${tstep}
+run ${Ninvt}
+reset_timestep 0
+
+
+#################### 2) Simulating transport properties, RDFs, and energy/temp in NVT ensmeble #################
+# computing average total energy, pontential energy, temperature, and pressure over time
+# variable TotEn equal etotal
+# fix TEAve all ave/time ${Ne} ${Nr} ${Nf} v_TotEn file TotalE.dat
+
+# variable PotEn equal pe
+# fix PEAve all ave/time ${Ne} ${Nr} ${Nf} v_PotEn file PotenE.dat
+
+compute T all temp
+fix TempAve all ave/time ${Ne} ${Nr} ${Nf} c_T file temperature.dat
+
+compute P all pressure T
+fix PressAve all ave/time ${Ne} ${Nr} ${Nf} c_P file pressure.dat
+
+# compute V all volume
+# fix VoluAve all ave/time ${Ne} ${Nr} ${Nf} c_T file volume.dat
+
+
+# #compute the forces to test the Fortran/C code and print them
+# compute myForces all pair/local dx dy dz fx fy fz
+# dump myForces all custom 1000 forces.dump id x y z fx fy fz
+# dump_modify myForces sort id
+
+
+
+# computing self-diffusion and Onsager coefficients using the OCTP plugin
+# compute positions all position
+# fix f3 all ordern diffusivity ${Ndiff} ${Nwrit} c_positions nb ${nb} nbe ${nbe} file diffself.dat diffonsag.dat
+
+
+# computing shear and bulk viscosities  using the OCTP plugin
+# fix f1 all ordern viscosity ${Nvisc} ${Nwrit} c_P nb ${nb} nbe ${nbe} file viscosity.dat
+
+# computing the RDF for all group pairs using OCTP function
+# compute rdfs all rdf/ext Nbin ${binnum} Nwrite ${Nrdfw} file rdf_octp.dat
+# fix f4 all ave/time 1 1 ${Nrdfe} c_rdfs
+
+# computing the RDF for all group pairs using OCTP function
+compute rdfs all rdf/ext Nbin ${binnum} Nwrite ${Nrdfw} file rdf_ext.dat
+fix f4 all ave/time 1 1 ${Nrdfe} c_rdfs
+
+
+#dump my_dump all custom 100 my_dump.dump id x y z vx vy vz
+
+# computing the RDF for all group pairs using LAMMPS function
+compute rdf all rdf ${binnum}
+fix f5 all ave/time ${Nrdfe} ${Nrdfw} ${Nrun} c_rdf[*] file rdf_lammps.dat mode vector
+
+# computing the RDF for all group pairs using force rdf
+compute rdff all rdf/force ${binnum}
+fix f6 all ave/time ${Nfrdfe} 1000 ${Nfrdff} c_rdff[*] file rdf_force.dat mode vector
+
+# Thermo style for outputing system properties to the log file
+thermo_style custom step temp f_TempAve press f_PressAve pe ke etotal
+thermo_modify flush yes
+#thermo 1
+
+dump trjectory all xyz ${Nd} movie.xyz
+
+
+#run ${Nrun}
+rerun ./input_used/my_dump.dump dump x y z
+undump trjectory
+quit
+

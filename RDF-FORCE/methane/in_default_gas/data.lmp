@@ -1,0 +1,15 @@
+created by fftool
+
+1 atoms
+1 atom types
+0.000000 4.214374 xlo xhi
+0.000000 4.214374 ylo yhi
+0.000000 4.214374 zlo zhi
+
+Masses
+
+   1   10.000  # LJ
+
+Atoms
+
+      1       1    1   0.000000  1.714400e+00  1.500000e+00  1.500000e+00  # LJ
