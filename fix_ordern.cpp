@@ -114,8 +114,6 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
 
   // OBTAINING THE ID OF COMPUTE FOR THIS FIX
   // number of input values (it must be only one compute)
-  // !!!JELLE!!! Change this in a way that if mode=diffusion, multiple computes can be addressed
-  // Fix the counting for error check according to number of computes asked for: See PARSING OPTIONAL ARGUMENTS
   nvalues = 0;
   int iarg = 6;
   while (iarg < narg) {
@@ -124,7 +122,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       iarg++;
     } else break;
   }
-  if (nvalues == 0) error->all(FLERR,"Increct number of inputs for fix ordern command");
+  if (nvalues == 0) error->all(FLERR,"Incorrect number of inputs for fix ordern command");
   if (nvalues > 1) error->all(FLERR,"Incorrect number of inputs for fix ordern command"); 
   char *suffix = new char[strlen(arg[6])];
   strcpy(suffix,&arg[6][2]);
@@ -138,7 +136,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   Compute *compute = modify->compute[icompute];   // the whole compute class 
 
   // PARSING OPTIONAL ARGUMENTS
-  iarg = 7;  // This value has to be changed if multiple computes are used in the diffusion mode imput.
+  iarg = 7;
   while (iarg < narg) {
     // add more file options for mode == visocisty/diffusion/thermcond
     if (strcmp(arg[iarg],"file") == 0) {
@@ -226,11 +224,6 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
   nktv2p = force->nktv2p;
 	  
   // Specific variables for each mode
-  // !!!JELLE!!! This section should:
-  // 1. Calculate: number of chunk types (same number as compute input arguments), so should be easy.
-  // 3. Create the correct output vector size, including all Self diffusivies (per chunk type) and all cross-correlations)
-  // 2. Compute or call the total number of chunks per chunk type (and maybe the total number of chunks)
-  
   if (mode == DIFFUSIVITY)  {
     deltat = (double) (nevery)*(update->dt);
     tngroup = group->ngroup ;  // the size of the arrays (group "all" included)
@@ -260,8 +253,6 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     memory->create(oldint,tnb,tnbe,vecsize,"fix/ordern:oldint");
     memory->create(rint,vecsize,"fix/ordern:rint");
   } else if ( mode == DIFFUSIVITY)
-      // !!!JELLE!!! Here we need to check of the variables and the groups go correct automatically if the ammount of chunk types and number of attoms is fixed above.
-      // I would expect that this works out automatically.
   {
     memory->create(PosC_ii,tnb,tnbe,tngroup,"fix/ordern:PosC_ii");
     memory->create(PosC_iix,tnb,tnbe,tngroup,"fix/ordern:PosC_iix");
@@ -448,10 +439,8 @@ void FixOrderN::end_of_step()
 
 void FixOrderN::invoke_scalar(bigint ntimestep)
 {
-  // !!!JELLE!!! his section calls the data out of the compute function. (Works generally for all modes right now, but not in the future):
-  // 1. In the future implementation, we can refer to multiple computes, so we need to make this an if statement (if ( (mode == DIFFUSION) ) use method which can deal with multiple computes)
-  // 2. This might be the best location to compute the COM of the chunks and store that in a large array and name that recdata again.
-  // 3. This computation of the COM of the chunks should be MPI operated and then end by correctly retrieve COM list from all threads.
+
+  int i,j,k,l;
   double scalar = ntimestep;
   // update the next timestep to call end_of_step()
   modify->addstep_compute(ntimestep+nevery);
@@ -479,7 +468,7 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
     return;
   }
 
-  // !!!JELLE!!! What is the goal of this count calculater here? I think it may be that if 0 no initialization is done yet and when it is above 0 it indices the line of the output file (+ of course header lines)
+
   if (count < 0)  
   {
     count = 0;
@@ -498,10 +487,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
   if (mode == DIFFUSIVITY)  // DIFFUSION
   {
     if (count == 0)   // only run during the first time step
-        // !!!JELLE!!! This section has to be redone. It is fine to still use an atom mask but we should have the following:
-        // 1. as we know beforehand already which chunks we have and how many types, we already know the size of this mask and the order.
-        // 2. The method to find and define new groups can be deleted.
-        // 3. Creating the oldint and rint, PosC_... arrays can be done with known indices. (we can make the variables created in the group finding array directly and then keep the old code for oldint and rint, PosC_... as well.
     { 
       natom = 0;
       // Finding corresponding groups to each atom at the first time
@@ -664,7 +649,6 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
 		        }
 	        } 
         } else if (mode == DIFFUSIVITY)
-            // If recdata correctly holds the new COM/chunk values, and all the variables are changed to refer to the correct chunk types, this section can be left as is.
         {
           for( k = 1 ; k <= ngroup ; k++ )
           {
