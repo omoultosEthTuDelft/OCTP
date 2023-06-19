@@ -16,19 +16,14 @@
 
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
-#include <string.h>
+
 #include "compute_rdf_ext.h"
 #include "atom.h"
 #include "update.h"
 #include "group.h"
 #include "domain.h"
-#include "modify.h"
-#include "fix_store.h"
 #include "error.h"
-
-#include <iostream>
 #include "memory.h"
-#include "force.h"
 
 using namespace LAMMPS_NS;
 
