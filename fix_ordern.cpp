@@ -17,16 +17,11 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-#include <cstdlib>
-#include <cstring>
-#include <unistd.h>
 #include "fix_ordern.h"
 #include "update.h"
 #include "force.h"
 #include "modify.h"
 #include "compute.h"
-#include "input.h"
-#include "variable.h"
 #include "memory.h"
 #include "error.h"
 #include "group.h"
@@ -34,6 +29,7 @@
 #include "atom.h"
 #include "citeme.h"
 
+#include <unistd.h>
 
 using namespace LAMMPS_NS;
 using namespace FixConst;

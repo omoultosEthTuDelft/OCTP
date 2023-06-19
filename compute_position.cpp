@@ -17,17 +17,11 @@
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
 
-#include <string.h>
 #include "compute_position.h"
 #include "atom.h"
 #include "update.h"
-#include "group.h"
 #include "domain.h"
 #include "error.h"
-
-#include <iostream>
-#include <string>
-#include "memory.h"
 
 using namespace LAMMPS_NS;
 

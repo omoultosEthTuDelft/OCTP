@@ -26,8 +26,9 @@ FixStyle(ordern,FixOrderN)
 #ifndef LMP_FIX_ORDERN_H
 #define LMP_FIX_ORDERN_H
 
-#include <cstdio>
 #include "fix.h"
+
+#include <cstdio>
 
 namespace LAMMPS_NS {
 
