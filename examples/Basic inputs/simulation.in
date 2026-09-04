@@ -110,7 +110,7 @@ variable Dens equal v_nMolecule*${mMolecule}/(vol*${A3_in_m3})
 fix DensAve all ave/time 1 ${NBR} ${NBR} v_Dens file density.dat
 
 run ${Npnpt}
-reset_timestep 0
+
 
 #################### 3) Initializing the NVT ensemble ####################
 # scaling the size of the system to the average volume
@@ -124,6 +124,7 @@ variable zhig equal (zlo+${sidesize})
 change_box all x final ${xlow} ${xhig} y final ${ylow} ${yhig} z final ${zlow} ${zhig}
 unfix DensAve
 unfix VoluAve
+reset_timestep 0
 
 # changing the ensemble to NVT
 unfix integrate
@@ -162,8 +163,6 @@ dump trjectory all xyz ${Nd} movie.xyz
 dump_modify trjectory element C H H O O          
 
 run ${Npnvt}
-reset_timestep 0
-
 undump trjectory
 
 #################### 3) Simulating in NVE ensmeble ######################
@@ -180,6 +179,8 @@ variable TE1 delete
 variable KE1 delete
 variable PE1 delete
 variable TempNew delete
+reset_timestep 0
+
 
 # changing the ensemble to NVE
 unfix integrate
