@@ -16,8 +16,9 @@ variable Pres equal 1.0       # Pressure in atm.
 variable MolMass equal 25.028 # Average molar mass (kg/kmol)
 variable MolAtom equal 3      # Number of atoms in a molecule
 
-variable RandomSeed equal 97 # The random seed for velocity
+variable RandomSeed equal 21 # The random seed for velocity
 variable tstep equal 1.0      # 1fs 
+
 variable Ninptpre equal 10000 # Pre-initialize the NPT ensemble (very small timesteps)
 variable Ninpt equal 100000    # Initialize the NPT ensemble
 variable Npnpt equal 1000000  # Production in the NPT ensemble (volume)
@@ -25,6 +26,8 @@ variable Ninvtpre equal 10000 # Pre-initialize the NVT ensemble (very small time
 variable Ninvt equal 50000    # Initialize the NVT ensemble
 variable Npnvt equal 10000000   # Production in the NVT ensemble (energy)
 variable Nrun equal 10000000  # production in the NVE ensemble
+
+
 variable Nf equal 100	      # Nfreq (fix ave/time and thermo)
 variable Ne equal  10         # Nevery (fix ave/time)
 variable Nr equal ${Nf}/${Ne} # Nrepeat (fix ave/time)
@@ -41,6 +44,7 @@ variable Nwrit equal 100000   # Nwrite for transport properties (fix ordern: wri
 variable Nrdfe equal 100      # Nevery for RDF (fix ave/time)
 variable Nrdfw equal 1000     # Nwrite for RDF (compute rdf/ext: write every (Nrdfw*Nrdfe))
 variable binnum equal 2000    # Number of bins for RDF
+variable balance_f  equal  10000          # Test: 1/10th of 100000
 
 #################### ATOM DEFINITION and FORCEFIELD ####################
 read_data ./data.lmp			# read the positions
@@ -72,7 +76,7 @@ thermo ${Nf}
 #################### 1) Initialize the NPT ensemble ####################
 # applying the shake algorithm for rigid molecules and the NPT solver
 fix constrain all shake 1.0e-6 1000 0 b 1 2 3 a 1
-fix integrate all npt temp ${Temp} 500 10.0 iso ${Pres} 100 100.0
+fix integrate all npt temp ${Temp} ${Temp} 100.0 iso ${Pres} ${Pres} 1000.0
 
 # Initializing the whole system with very small timesteps in the NPT ensemble
 timestep 0.001
@@ -87,32 +91,33 @@ timestep 0.5
 run ${Ninptpre} 
 reset_timestep 0
 
-# continuing the initialization with the final value of timestep
+# NPT equilibration run (1/10 of production time)
 unfix integrate
-fix integrate all npt temp 500 ${Temp} 100.0 iso 100 ${Pres} 1000.0
-
+fix integrate all npt temp ${Temp} ${Temp} 100.0 iso ${Pres} ${Pres} 1000.0
+reset_timestep 0
 timestep ${tstep}
 run ${Ninpt}
 
-unfix integrate
-fix integrate all npt temp ${Temp} ${Temp} 100.0 iso ${Pres} ${Pres} 1000.0
-run ${Ninpt}
-
 reset_timestep 0
-#################### 2) Obtaining average volume in NPT ######################
-# Getting the average volume of the system
+#################### 2) NPT Production (Obtaining average volume) ######################
+variable TotEn equal etotal
+variable PotEn equal pe
 variable Volume equal vol
-fix VoluAve all ave/time 1 ${Npnpt} ${Npnpt} v_Volume file volume.dat
-
-# Getting the average density of the system (block averaging)
 variable Dens equal density
-fix DensAve all ave/time 1 ${NBR} ${NBR} v_Dens file density.dat
+compute T all temp
+compute P all pressure T
+
+
+# Getting the average volume and density of the system
+fix VolumeAve all ave/time 1 ${Npnpt} ${Npnpt} v_Volume file volume.dat
+fix DensAve all ave/time 1 ${Npnpt} ${Npnpt} v_Dens file density.dat
+fix AveAll all ave/time ${Ne} ${Nr} ${Nf} v_TotEn v_PotEn c_T c_P v_Dens file npt_prod.dat
 
 run ${Npnpt}
 
 #################### 3) Initializing the NVT ensemble ####################
 # scaling the size of the system to the average volume
-variable sidesize equal (f_VoluAve^(1.0/3.0))    # get the volume
+variable sidesize equal (f_VolumeAve^(1.0/3.0))    # get the volume
 variable xlow equal xlo
 variable ylow equal ylo
 variable zlow equal zlo
@@ -121,7 +126,8 @@ variable yhig equal (ylo+${sidesize})
 variable zhig equal (zlo+${sidesize})
 change_box all x final ${xlow} ${xhig} y final ${ylow} ${yhig} z final ${zlow} ${zhig}
 unfix DensAve
-unfix VoluAve
+unfix VolumeAve
+unfix AveAll
 
 # changing the ensemble to NVT
 unfix integrate
@@ -146,28 +152,18 @@ run ${Ninvt}
 reset_timestep 0
 
 #################### 4) Sampling data in NVT #####################
-# computing average total energy, pontential energy, temperature, and pressure over time
-variable TotEn equal etotal
-fix TEAve all ave/time ${Ne} ${Nr} ${Nf} v_TotEn file TotalE.dat
+# computing average total energy, potential energy, temperature, and pressure over time
+fix AveAll all ave/time ${Ne} ${Nr} ${Nf} v_TotEn v_PotEn c_T c_P file nvt_prod.dat
 
-variable PotEn equal pe
-fix PEAve all ave/time ${Ne} ${Nr} ${Nf} v_PotEn file PotenE.dat
+fix balance all balance ${balance_f} 0.9 shift xyz 20 1.1
 
-compute T all temp
-fix TempAve all ave/time ${Ne} ${Nr} ${Nf} c_T file temperature.dat
-
-compute P all pressure T
-fix PressAve all ave/time ${Ne} ${Nr} ${Nf} c_P file pressure.dat
-
-
+# The OCTP commands
 # computing self-diffusion and Onsager coefficients using the OCTP plugin
 compute positions all position
 fix f3 all ordern diffusivity ${Ndiff} ${Nwrit} c_positions nb ${nb} nbe ${nbe} file diffself.dat diffonsag.dat
 
-
 # computing shear and bulk viscosities  using the OCTP plugin
 fix f1 all ordern viscosity ${Nvisc} ${Nwrit} c_P nb ${nb} nbe ${nbe} file viscosity.dat
-
 
 # computing thermal conductivity using the OCTP plugin
 compute KE all ke/atom
@@ -181,6 +177,9 @@ fix f2 all ordern thermalconductivity ${Ncond} ${Nwrit} c_heatflux nb ${nb} nbe 
 compute rdfs all rdf/ext Nbin ${binnum} Nwrite ${Nrdfw} file rdf.dat
 fix f4 all ave/time 1 1 ${Nrdfe} c_rdfs
 
+# Averaging temperature and pressure for thermo output
+fix TempAve all ave/time ${Ne} ${Nr} ${Nf} c_T
+fix PressAve all ave/time ${Ne} ${Nr} ${Nf} c_P
 
 # Thermo style for outputing system properties to the log file
 thermo_style custom step temp f_TempAve press f_PressAve pe ke etotal

@@ -228,8 +228,8 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
     vecsize = 0;   // WILL BE OVERWRITTEN at count = 0 (# of atoms in groups)
   } else if (mode == VISCOSITY) {
     deltat = (double) (2.0*nevery)*(update->dt);
-    vecsize = 7;
-    sampsize = 8;
+    vecsize = 10;
+    sampsize = 11;
     sumP = 0;
     numP = 0;
     
@@ -313,7 +313,7 @@ FixOrderN::FixOrderN(LAMMPS *lmp, int narg, char **arg) :
       fprintf(fp1,"#NOTE: MSDs have been divided by ");
       fprintf(fp1,"2 or 10 (i.e., the viscosity computed from all components).\n");
       fprintf(fp1,"#Time\tMSD_xx\tMSD_yy\tMSD_zz\tMSD_xy\tMSD_xz\tMSD_yz\t");
-      fprintf(fp1,"MSD_off\tMSD_all\tMSD_bulkvisc\n");
+      fprintf(fp1,"MSD_off\tMSD_all\tMSD_all2\tMSD_bulkvisc\n");
     } else if (mode == THERMCOND) {
       fprintf(fp1,"#NOTE: MSDs should be divided by (temperature^2).\n");
       fprintf(fp1,"#NOTE: MSDs have been divided by 2.\n");
@@ -589,10 +589,18 @@ void FixOrderN::invoke_scalar(bigint ntimestep)
           samp[i][j][vecsize] = 0.0;
         }
     }
-    data[6] = (recdata[0]+recdata[1]+recdata[2])/3.0;
-    for (i = 0; i < 3; i++) data[i] = (recdata[i] - data[6]);
+    double avgP_local = (recdata[0]+recdata[1]+recdata[2])/3.0;
+    for (i = 0; i < 3; i++) data[i] = (recdata[i] - avgP_local);
     for (i = 3; i < 6; i++) data[i] = recdata[i];
-    sumP += data[6];
+    
+    // OS,(2) components for consistent method (indices 6-8)
+    data[6] = (recdata[0] - recdata[1]) / 2.0;  // P_xx^OS,(2)
+    data[7] = (recdata[1] - recdata[2]) / 2.0;  // P_yy^OS,(2)
+    data[8] = (recdata[2] - recdata[0]) / 2.0;  // P_zz^OS,(2)
+    
+    // Average pressure at index 9
+    data[9] = avgP_local;
+    sumP += data[9];
     numP += 1.0;
   } else if (mode == THERMCOND)  // THERMAL CONDUCTIVITY
   {
@@ -863,6 +871,7 @@ void FixOrderN::write_viscosity()
   int i, j, k;
 	double totalall;
 	double totaloff;
+  double totalall2;
   double stresscomp;
   double volume = (domain->xprd * domain->yprd * domain->zprd);
   double coef = (volume/2.0/boltz)*(1.0/nktv2p);
@@ -879,6 +888,7 @@ void FixOrderN::write_viscosity()
 	    // SHEAR VISCOSITY
 	    totalall = 0.0;
 	    totaloff = 0.0;
+      totalall2 = 0.0;
 	    for (k = 0; k < 6; k++)
 	    {
 	      stresscomp = coef*samp[i][tnbe-j][k]/nsamp[i][tnbe-j];
@@ -894,9 +904,23 @@ void FixOrderN::write_viscosity()
 	        totalall += 2.0*1.0*stresscomp/10.0;
 	        totaloff += stresscomp/3.0;
 	      }
-	    }
+      }
+      
+      // Franco & Firoozabadi (2023) Method 2: ω_αβ = (1+δ_αβ)/12
+      // Diagonal (xx,yy,zz): ω = 1/6 each
+      for (k = 6; k < 9; k++) {
+        stresscomp = coef * samp[i][tnbe-j][k] / nsamp[i][tnbe-j];
+        totalall2 += stresscomp / 6.0;
+      }
+      // Off-diagonal (xy,xz,yz): ω = 1/12 each in double sum, but each code component
+      // represents 2 paper components (xy+yx, etc.), so effective ω = 2/12 = 1/6
+      for (k = 3; k < 6; k++) {
+        stresscomp = coef * samp[i][tnbe-j][k] / nsamp[i][tnbe-j];
+        totalall2 += stresscomp / 6.0;
+      }
 	    fprintf(fp1,format,totaloff);
       fprintf(fp1,format,totalall);
+      fprintf(fp1,format,totalall2);
 	    // BULK VISCOSITY
 	    double intp2 = samp[i][tnbe-j][vecsize-1]/nsamp[i][tnbe-j];
 	    double intp = samp[i][tnbe-j][vecsize]/nsamp[i][tnbe-j];
